@@ -1,0 +1,42 @@
+# ============================================================
+# .gitignore — SOLIFAN ReadinessOps
+# ============================================================
+
+# Cortex Code internal state
+.cortex/
+
+# Environment and credentials
+.env
+.env.*
+*.pem
+*.p8
+*.key
+credentials*
+connections.toml
+config.toml
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Local output and logs
+*.log
+output/
+tmp/
+temp/

@@ -1,0 +1,5 @@
+name: readinessops
+channels:
+  - snowflake
+dependencies:
+  - snowflake-snowpark-python
