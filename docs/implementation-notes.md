@@ -1,160 +1,135 @@
 # Implementation Notes
 
-## Debugging History
+## Scope
 
-This document records the verified debugging steps taken during development
-of `SP_RUN_READINESS_AGENT`. All issues were identified and resolved using
-Snowflake's Cortex Code CLI through iterative testing.
+This document records the principal implementation and validation decisions for both the original readiness-gap prototype and the governed Governance Agent Workspace.
 
----
+## Original Prototype Findings
 
-### Issue 1: Cortex COMPLETE Returns Markdown Fences
+### Cortex COMPLETE May Return Markdown Fences
 
-**Discovery**: Called `SNOWFLAKE.CORTEX.COMPLETE('mistral-large2', ...)` directly
-and observed the response wrapped in ` ```json ... ``` ` despite explicit prompt
-instructions not to.
+Even when instructed to return raw JSON, model output can contain markdown fences.
 
-**Fix**: Added `REGEXP_REPLACE` to strip fences before JSON parsing:
-```sql
-v_llm_response := REGEXP_REPLACE(:v_llm_response, '^\\s*```(json|JSON)?\\s*', '');
-v_llm_response := REGEXP_REPLACE(:v_llm_response, '\\s*```\\s*$', '');
-v_llm_response := TRIM(:v_llm_response);
-```
+**Resolution:** Strip optional fences before parsing and use `TRY_PARSE_JSON`.
 
-**Verification**: Tested with synthetic fenced JSON — `TRY_PARSE_JSON` returned
-valid VARIANT after stripping.
+### Safe Casting from VARIANT
 
----
+`TRY_CAST` does not accept every direct VARIANT-to-number conversion.
 
-### Issue 2: TRY_PARSE_JSON vs PARSE_JSON
+**Resolution:** Convert JSON values to `VARCHAR` before numeric `TRY_CAST`.
 
-**Discovery**: If the LLM returns malformed JSON, `PARSE_JSON` throws an unhandled
-exception that could leave the database in an inconsistent state.
+### Transaction Boundaries
 
-**Fix**: Used `TRY_PARSE_JSON` which returns NULL on invalid input, allowing
-graceful handling:
-```sql
-v_parsed := (SELECT TRY_PARSE_JSON(:v_llm_response));
-IF (:v_parsed IS NULL) THEN
-    ROLLBACK;
-    -- log FAILED record
-    RETURN 'FAILED: ...';
-END IF;
-```
+Cleanup performed before a transaction cannot be restored by rollback.
 
----
+**Resolution:** Keep destructive legacy-prototype cleanup inside a transaction. The governed flow avoids deleting prior canonical output during proposal generation.
 
-### Issue 3: Transaction and Rollback Placement
+### Action-to-Gap Integrity
 
-**Discovery (code review)**: Initial version placed `DELETE` statements before
-`BEGIN TRANSACTION`. This meant rollback would not restore deleted data.
+A loose join can create an action with no valid linked gap.
 
-**Fix**: Moved `BEGIN TRANSACTION` before all `DELETE` statements so that
-both cleanup and insertion are atomic.
+**Resolution:** Use validated join conditions and publish source identifiers.
 
-**Verification**: Tested exception path — confirmed database returns to
-pre-call state on failure.
+## Governance Workspace Implementation
 
----
+### Proposal Isolation
 
-### Issue 4: TRY_CAST Rejects VARIANT Directly
+AI-generated results are written to `GOVERNANCE_AGENT_PROPOSAL` as `REVIEW_REQUIRED`, not to canonical tables.
 
-**Discovery**: First procedure execution hit internal error `300010`. Isolated
-testing revealed:
+### Evidence Traceability
 
-```sql
--- FAILS: "Function TRY_CAST cannot be used with arguments of types VARIANT and NUMBER(38,0)"
-TRY_CAST(f.VALUE:priority_score AS INTEGER)
+`GOVERNANCE_AGENT_PROPOSAL_SOURCE` stores the source Question, Answer, Evidence, and Rule context used to support each proposal.
 
--- WORKS: Cast to VARCHAR first, then to INTEGER
-TRY_CAST(f.VALUE:priority_score::VARCHAR AS INTEGER)
-```
+### Human Review Procedure
 
-**Root cause**: Snowflake's `TRY_CAST` function does not accept VARIANT as input.
-The `::VARCHAR` accessor extracts the value as a string, which `TRY_CAST` can
-then safely convert.
+`SP_REVIEW_AGENT_PROPOSAL`:
 
-**Fix**: Applied `::VARCHAR` before `TRY_CAST` for both `priority_score` and
-`due_in_days`, with `COALESCE` defaults (50 and 30 respectively).
+- Updates one proposal
+- Accepts `APPROVE` or `REJECT`
+- Stores review comment, reviewer, and time
+- Appends a decision event to `GOVERNANCE_APPROVAL_HISTORY`
 
-**Verification**: Anonymous block test confirmed INSERT succeeded. Full procedure
-call then completed successfully.
+### Controlled Publication
 
----
+`SP_PUBLISH_AGENT_RUN`:
 
-### Issue 5: INNER JOIN for Action-Gap Linking
+- Selects approved proposals only
+- Publishes canonical Gap and Action records
+- Sets source proposal and agent-run IDs
+- Changes proposal state to `PUBLISHED`
+- Records publication history
+- Prevents duplicate publication
 
-**Discovery (code review)**: Using `LEFT JOIN` when inserting actions could produce
-rows with NULL `GAP_ID` if the LLM returned a `question_id` not matching any gap.
+### Priority Normalization
 
-**Fix**: Changed to `INNER JOIN` with additional filter `g.GAP_ID LIKE :v_agent_run_prefix || '%'`
-to ensure actions only link to gaps created in the same run.
+The model occasionally returned a 1–5 priority scale despite the requested 1–100 format.
 
----
+**Resolution:**
 
-## End-to-End Verification
+- Prompt output values were constrained to `60|70|80|90|95`
+- Procedure logic maps 1–5 to 60–95 when needed
+- Other numeric output is bounded safely
 
-After all fixes, the procedure was called successfully:
+### Stored Procedure Portability
 
-```
-CALL SP_RUN_READINESS_AGENT('RUN_001');
-→ 'Agent complete. Generated 5 gaps and 5 actions for run RUN_001'
-```
+`USE SCHEMA` inside the SQL stored procedures caused an unsupported-statement error in execution.
 
-Post-run validation confirmed:
-- 5 new gaps with AR_ prefix (priorities 70-95)
-- 5 new actions linked to correct gaps
-- 4 agent history rows with distinct timestamps
-- 0 FAILED audit rows
-- All sample data (GAP_%, ACT_%, AGENT_RUN_%) preserved intact
+**Resolution:** Remove session-context statements from procedure bodies and deploy procedures in the target schema.
 
----
+### Streamlit Rerun Compatibility
 
-### Issue 6: Streamlit Agent Status Metric — Alphabetical MAX
+The deployed Streamlit runtime did not expose `st.rerun`.
 
-**Discovery (validation)**: The metric `MAX(AGENT_STEP)` returned `VALIDATE_EVIDENCE`
-instead of `GENERATE_ACTIONS` because SQL `MAX` on VARCHAR is alphabetical, not temporal.
+**Resolution:** Add a compatibility helper that uses `st.rerun` when available and otherwise calls `st.experimental_rerun`.
 
-**Fix**: Changed to subquery with `ORDER BY CREATED_AT DESC LIMIT 1`:
-```sql
-SELECT COALESCE(
-    (SELECT AGENT_STEP FROM AGENT_RUN_HISTORY
-     WHERE RUN_ID = :run_id AND AGENT_RUN_ID LIKE 'AR_%'
-     ORDER BY CREATED_AT DESC LIMIT 1),
-    'NO RUNS'
-) AS S
-```
+### Encoding and Status Labels
 
-**Verification**: Returns `GENERATE_ACTIONS` after a successful run (the chronologically
-last step), and `FAILED` if the most recent step was a failure.
+A Windows edit introduced malformed characters into the status-label mapping.
 
----
+**Resolution:** Replace decorative symbols with ASCII status labels:
 
-## Clean-Room Validation
+- `[DRAFT]`
+- `[APPROVED]`
+- `[REJECTED]`
+- `[PUBLISHED]`
 
-The repository SQL scripts were validated end-to-end in a separate
-`READINESSOPS_VALIDATION` database with no prior state:
+### Proposal-Type Review Safety
 
-1. All 8 tables created successfully
-2. View created successfully
-3. Procedure created successfully
-4. Seed data loaded (deterministic reruns confirmed)
-5. Agent run: 5 gaps, 5 actions, 4 history steps, 0 failures
-6. Cleanup removed only AR_% rows, preserved sample data
-7. Second agent run after cleanup succeeded identically
-8. Streamlit app deployed and queries validated
+The original tab interface returned to the Gap tab after Streamlit reruns. This created a risk that a reviewer could believe they were acting on a Risk while actually submitting an action against a Gap.
 
-### Required Privileges
+**Resolution:**
 
-- `CREATE DATABASE` (or existing database with CREATE SCHEMA)
-- `CREATE TABLE`, `CREATE VIEW`, `CREATE PROCEDURE` in target schema
-- `USAGE` on `SNOWFLAKE.CORTEX` (for COMPLETE function)
-- `USAGE` on a warehouse (for query execution and Streamlit)
-- `CREATE STREAMLIT` (for dashboard deployment)
-- `CREATE STAGE` (for Streamlit file hosting)
+- Replace tabs with a stateful radio selector
+- Use one explicit proposal type at a time
+- Preserve selection through reruns
+- Show a completion message after review
+- Validate comments and status by proposal type
 
-### Cortex Dependencies
+## Final Validation
 
-- Model: `mistral-large2` must be available in the account's region
-- Function: `SNOWFLAKE.CORTEX.COMPLETE()` must be enabled
-- No external network access required
+A controlled UI and SQL test validated the complete lifecycle:
+
+| Proposal Type | Decision | Final State | Canonical Result | History |
+|---|---|---|---:|---:|
+| Gap | Approve, then publish | `PUBLISHED` | 1 Gap | 2 |
+| Risk | Reject | `REJECTED` | 0 | 1 |
+| Action | Approve, then publish | `PUBLISHED` | 1 Action | 2 |
+
+Additional validation:
+
+- Latest Draft Proposals changed 12 → 11 → 10 → 9
+- Proposal-type selection remained stable after each rerun
+- Success messages appeared after review actions
+- Review comments stayed attached to the correct proposal
+- Published Gap and Action carried source agent-run and proposal IDs
+- Rejected Risk had no published entity ID
+- Repeat publication did not create duplicate canonical records
+- Dashboard view excluded legacy `AR_%` records
+
+## Environment
+
+- Database: `READINESSOPS_VALIDATION`
+- Schema: `APP`
+- Streamlit app: `READINESSOPS_DASHBOARD`
+- Model: `mistral-large2`
+- Demonstrated agent run: `GR_20260720_235320_879`

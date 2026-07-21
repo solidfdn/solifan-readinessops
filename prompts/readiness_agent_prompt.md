@@ -1,106 +1,128 @@
-# LLM Prompt Template — Readiness Gap Analyst
+# LLM Prompt Template — Governance Review
 
 ## Overview
 
-This prompt is sent to `SNOWFLAKE.CORTEX.COMPLETE('mistral-large2', ...)` by the
-`SP_RUN_READINESS_AGENT` stored procedure. It instructs the LLM to analyze
-assessment data and return structured JSON identifying gaps and recommended actions.
+This prompt is constructed by `SP_RUN_FULL_GOVERNANCE_REVIEW` and sent to:
 
-## System Role
+```sql
+SNOWFLAKE.CORTEX.COMPLETE('mistral-large2', <prompt>)
+```
 
-> You are an AI readiness gap analyst. Analyze the following assessment data and produce a JSON response.
+Its purpose is to generate evidence-grounded **Gap**, **Risk**, and **Action** proposals. The output is stored as review drafts and does not become a canonical governance record until human approval and controlled publication.
+
+## Standard Instruction
+
+```text
+Review the selected Assessment Run. Evaluate the sufficiency of available evidence, identify readiness gaps, assess the related governance and operational risks, and propose prioritized actions. Every proposal must be supported by the supplied Question, Answer, Evidence, and Rule context. Do not invent evidence.
+```
+
+## Optional Additional Instruction
+
+A user can add a business priority or time horizon, for example:
+
+```text
+Prioritize governance issues that could block executive approval within the next 90 days. Do not propose any gap, risk, or action that is not supported by the supplied assessment evidence.
+```
+
+The additional instruction supplements the standard instruction. It does not remove the evidence-grounding requirement.
 
 ## Input Format
 
-The procedure constructs the input dynamically from table data. Each question block follows this structure (repeated per question):
+Each assessment item contains:
 
-```
+```text
 ---
 Question ID: Q001
 Domain: Strategy and Ownership
 Question: Is there a named executive owner for the AI and data program?
-Expected Evidence: Executive sponsor memo or governance charter
+Rule: Executive sponsor memo or governance charter
 Answer Status: ANSWERED
-Answer Text: The CIO is the executive sponsor, but the role is not yet reflected in the formal governance charter.
-Evidence Title: Draft AI Governance Charter
-Evidence Text: The CIO is mentioned as sponsor. However, operating responsibilities and escalation rules are still marked as draft.
+Answer: The CIO is the executive sponsor, but the role is not yet reflected in the formal governance charter.
+Evidence ID: EV001
+Evidence: The CIO is mentioned as sponsor. Operating responsibilities and escalation rules remain draft.
 Evidence Status: PARTIAL
 ```
 
-### Field Meanings
+## Source Fields
 
-| Field | Source Table | Description |
-|-------|-------------|-------------|
-| Question ID | READINESS_QUESTIONS | Unique identifier |
-| Domain | READINESS_DOMAINS | Readiness domain name |
-| Question | READINESS_QUESTIONS | The readiness question text |
-| Expected Evidence | READINESS_QUESTIONS | What evidence should exist |
-| Answer Status | ASSESSMENT_ANSWERS | ANSWERED, UNCONFIRMED, UNKNOWN, NOT_PREPARED |
-| Answer Text | ASSESSMENT_ANSWERS | Free-text response |
-| Evidence Title | EVIDENCE_ITEMS | Name of supporting evidence |
-| Evidence Text | EVIDENCE_ITEMS | Description of evidence content |
-| Evidence Status | EVIDENCE_ITEMS | SUFFICIENT, PARTIAL, INSUFFICIENT, MISSING |
+| Prompt Field | Source |
+|---|---|
+| Question ID | `READINESS_QUESTIONS.QUESTION_ID` |
+| Domain | `READINESS_DOMAINS.DOMAIN_NAME` |
+| Question | `READINESS_QUESTIONS.QUESTION_TEXT` |
+| Rule | `READINESS_QUESTIONS.EXPECTED_EVIDENCE` |
+| Answer Status | `ASSESSMENT_ANSWERS.ANSWER_STATUS` |
+| Answer | `ASSESSMENT_ANSWERS.ANSWER_TEXT` |
+| Evidence ID | `EVIDENCE_ITEMS.EVIDENCE_ID` |
+| Evidence | `EVIDENCE_ITEMS.EVIDENCE_TEXT` |
+| Evidence Status | `EVIDENCE_ITEMS.EVIDENCE_STATUS` |
 
-## Instructions Block
+## Required Output
 
-```
-For each question where the answer is not fully confirmed with sufficient evidence, identify a gap.
-Then for each gap, recommend one concrete action.
-```
-
-## Rules
-
-- `severity` must be HIGH, MEDIUM, or LOW
-- `priority_score` must be an integer 1-100 (higher = more urgent)
-- `suggested_owner` must be one of: Risk Manager, Data Governance Lead, Program Lead, PMO Lead, Security Lead
-- `due_in_days` must be 14, 30, 60, or 90
-
-## Expected Output Schema
-
-The LLM must return **only valid JSON** with no markdown wrapping:
+Return one JSON object with three arrays:
 
 ```json
 {
   "gaps": [
     {
       "question_id": "Q001",
-      "severity": "MEDIUM",
-      "priority_score": 70,
-      "gap_title": "Short title describing the gap",
-      "gap_description": "Explanation of why this is a gap."
+      "severity": "HIGH",
+      "priority": 95,
+      "title": "Short gap title",
+      "description": "Why this is a readiness gap.",
+      "rationale": "How the supplied assessment context supports the proposal."
+    }
+  ],
+  "risks": [
+    {
+      "question_id": "Q001",
+      "severity": "HIGH",
+      "priority": 90,
+      "title": "Short risk title",
+      "description": "The governance or operational exposure.",
+      "rationale": "How the supplied assessment context supports the proposal."
     }
   ],
   "actions": [
     {
       "question_id": "Q001",
-      "action_title": "Short action title",
-      "action_description": "Concrete steps to close the gap.",
-      "suggested_owner": "Program Lead",
-      "due_in_days": 60
+      "severity": "HIGH",
+      "priority": 95,
+      "title": "Short action title",
+      "description": "Concrete work required.",
+      "rationale": "How the action addresses the supplied evidence gap.",
+      "recommended_owner": "Program Lead",
+      "due_in_days": 30
     }
   ]
 }
 ```
 
-### Output Field Definitions
+## Output Rules
 
-| Field | Maps To | Description |
-|-------|---------|-------------|
-| gaps[].question_id | READINESS_GAPS.QUESTION_ID | Links gap to source question |
-| gaps[].severity | READINESS_GAPS.SEVERITY | HIGH / MEDIUM / LOW |
-| gaps[].priority_score | READINESS_GAPS.PRIORITY_SCORE | 1-100, higher = more urgent |
-| gaps[].gap_title | READINESS_GAPS.GAP_TITLE | Brief title |
-| gaps[].gap_description | READINESS_GAPS.GAP_DESCRIPTION | Detailed explanation |
-| actions[].question_id | (join key) | Links action to its gap via question_id |
-| actions[].action_title | RECOMMENDED_ACTIONS.ACTION_TITLE | Brief title |
-| actions[].action_description | RECOMMENDED_ACTIONS.ACTION_DESCRIPTION | Steps to resolve |
-| actions[].suggested_owner | RECOMMENDED_ACTIONS.OWNER_NAME | Responsible role |
-| actions[].due_in_days | RECOMMENDED_ACTIONS.DUE_IN_DAYS | Deadline in days |
+- Return JSON only
+- Do not use markdown fences
+- Do not invent evidence
+- Every proposal must reference a supplied `question_id`
+- `severity` must be `HIGH`, `MEDIUM`, or `LOW`
+- `priority` should be one of `60`, `70`, `80`, `90`, or `95`
+- `recommended_owner` must be one of:
+  - `Risk Manager`
+  - `Data Governance Lead`
+  - `Program Lead`
+  - `PMO Lead`
+  - `Security Lead`
+- `due_in_days` must be `14`, `30`, `60`, or `90`
 
-## Post-Processing Notes
+## Post-Processing
 
-1. **Markdown fences**: The procedure strips ` ```json ` / ` ``` ` wrappers via REGEXP_REPLACE
-2. **Validation**: TRY_PARSE_JSON is used; NULL result triggers FAILED audit row
-3. **Type safety**: `priority_score` and `due_in_days` use `TRY_CAST(::VARCHAR AS INTEGER)` with defaults
-4. **Model**: `mistral-large2` selected for structured JSON output reliability
-5. **Token limits**: For assessments with 20+ questions, consider batching into groups of 10
+The stored procedure:
+
+1. Strips optional markdown fences
+2. Parses with `TRY_PARSE_JSON`
+3. Fails the agent run safely if JSON is invalid
+4. Normalizes 1–5 priority output to 60–95
+5. Bounds other priority values safely
+6. Stores proposals as `REVIEW_REQUIRED`
+7. Creates proposal-source traceability
+8. Requires human review before publication

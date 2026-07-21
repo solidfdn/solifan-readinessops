@@ -1,210 +1,239 @@
 # SOLIFAN ReadinessOps
 
-**AI-Powered Readiness Gap Agent for Snowflake Cortex**
+**Human-governed AI readiness management on Snowflake**
 
-An autonomous AI agent that evaluates organizational AI readiness by analyzing
-assessment answers and evidence, then generates prioritized gaps and remediation
-actions — entirely within Snowflake using Cortex AI.
+ReadinessOps turns assessment answers and evidence into governed Gap, Risk, and Action proposals. Snowflake Cortex generates the drafts, but no AI output becomes a canonical governance record until a human reviewer approves and publishes it.
 
----
+## Governance Flow
 
-## The Problem
+```text
+Question + Answer + Evidence + Rule
+                ↓
+       Cortex AI governance review
+                ↓
+       Gap / Risk / Action drafts
+                ↓
+        Human approve or reject
+                ↓
+       Controlled publication
+                ↓
+ Dashboard + audit-ready history
+```
 
-Organizations adopting AI need structured readiness assessments to identify
-governance gaps, missing evidence, and unowned risks. Manual gap analysis is
-slow, inconsistent, and doesn't scale across multiple domains.
+## What It Demonstrates
 
-## The Outcome
+- Evidence-grounded governance review inside Snowflake
+- Gap, Risk, and Action proposal generation
+- Draft isolation with `REVIEW_REQUIRED` status
+- Human approval and rejection with comments
+- Controlled publication to canonical tables
+- Source traceability from every proposal back to assessment context
+- Immutable approval and publication history
+- Assessment and agent-run history for repeatable governance operations
+- Streamlit in Snowflake workspace for review and publication
 
-A single `CALL SP_RUN_READINESS_AGENT('RUN_001')` triggers:
+## Screenshots
 
-1. Reads all assessment answers and evidence
-2. Constructs a structured prompt for Cortex AI
-3. Receives and validates a JSON response
-4. Writes prioritized gaps and actions to the database
-5. Logs every step for audit compliance
+### Governance Review
 
-**Verified result**: 5 gaps detected, 5 actions generated, 4 audit rows logged,
-0 failures — with full transaction safety and idempotent reruns.
+![Governance review](assets/screenshots/app_ss_01.png)
 
-### Screenshots
+### Human Review
 
-#### Dashboard and Gap Board
+![Human review](assets/screenshots/app_ss_02.png)
 
-![Dashboard and Gap Board](assets/screenshots/app_ss_01.png)
+### Controlled Publish
 
-#### Recommended Actions and Agent Run History
-
-![Recommended Actions and Agent Run History](assets/screenshots/app_ss_02.png)
-
----
+![Controlled publish](assets/screenshots/app_ss_03.png)
 
 ## Architecture
 
-```
-Assessment Tables → Prompt Construction → Snowflake Cortex AI (mistral-large2)
-    → JSON Validation → Gaps + Actions → Audit History → Action Board View
+```mermaid
+flowchart LR
+    A[Assessment Run] --> B[Questions]
+    B --> C[Answers]
+    B --> D[Evidence]
+    B --> E[Expected Evidence / Rule]
+
+    C --> F[SP_RUN_FULL_GOVERNANCE_REVIEW]
+    D --> F
+    E --> F
+
+    F --> G[Snowflake Cortex AI]
+    G --> H[GOVERNANCE_AGENT_PROPOSAL]
+    F --> I[GOVERNANCE_AGENT_PROPOSAL_SOURCE]
+    F --> J[GOVERNANCE_AGENT_RUN]
+
+    H --> K{Human Review}
+    K -->|Approve| L[APPROVED]
+    K -->|Reject| M[REJECTED]
+
+    L --> N[SP_PUBLISH_AGENT_RUN]
+    N --> O[READINESS_GAPS]
+    N --> P[RECOMMENDED_ACTIONS]
+    N --> Q[GOVERNANCE_APPROVAL_HISTORY]
+
+    O --> R[V_READINESSOPS_ACTION_BOARD]
+    P --> R
+    R --> S[Streamlit Dashboard]
 ```
 
-See [docs/architecture.md](docs/architecture.md) for full diagrams.
+See [docs/architecture.md](docs/architecture.md) for the detailed design.
 
----
+## Core Snowflake Objects
+
+| Object | Purpose |
+|---|---|
+| `GOVERNANCE_AGENT_RUN` | Stores each governance review execution, instruction, model, status, and result |
+| `GOVERNANCE_AGENT_PROPOSAL` | Stores Gap, Risk, and Action drafts and their review state |
+| `GOVERNANCE_AGENT_PROPOSAL_SOURCE` | Links proposals to Question, Answer, Evidence, and Rule context |
+| `GOVERNANCE_APPROVAL_HISTORY` | Stores review and publication events |
+| `SP_RUN_FULL_GOVERNANCE_REVIEW` | Generates evidence-grounded draft proposals |
+| `SP_REVIEW_AGENT_PROPOSAL` | Approves or rejects one proposal with a comment |
+| `SP_PUBLISH_AGENT_RUN` | Publishes only approved proposals |
+| `V_READINESSOPS_ACTION_BOARD` | Presents canonical dashboard records and excludes legacy direct-write output |
 
 ## Snowflake Features Used
 
 | Feature | Usage |
-|---------|-------|
-| **Cortex AI** | `SNOWFLAKE.CORTEX.COMPLETE()` for LLM gap analysis |
-| **SQL Scripting** | Stored procedure with LET, transactions, exceptions |
-| **Semi-structured** | VARIANT, FLATTEN, TRY_PARSE_JSON for JSON |
-| **Views** | Denormalized action board for dashboarding |
-| **TRY_CAST** | Safe type conversion with fallback defaults |
-
----
-
-## CoCo CLI Development Workflow
-
-This project was built entirely using Snowflake's Cortex Code CLI:
-
-- Live schema inspection via `sql_execute`
-- Iterative procedure development with real-time error diagnosis
-- Isolated unit testing of each SQL component
-- Systematic code review for security and correctness
-- Repository assembly from verified deployed state
-
----
+|---|---|
+| Cortex AI | `SNOWFLAKE.CORTEX.COMPLETE()` for structured governance analysis |
+| SQL Scripting | Stored procedures, validation, exception handling, and controlled writes |
+| Semi-structured data | `VARIANT`, `FLATTEN`, and `TRY_PARSE_JSON` |
+| Streamlit in Snowflake | Review, approve, reject, publish, and inspect run history |
+| Views | Canonical presentation layer for dashboard output |
+| Hashing | Input fingerprint for run traceability |
 
 ## Quickstart
 
 ### Prerequisites
 
-- Snowflake account with Cortex AI enabled (mistral-large2 model access)
-- ACCOUNTADMIN or equivalent privileges
+- Snowflake account with Cortex AI enabled
+- Access to the `mistral-large2` model
+- A warehouse available to the application
+- Privileges to create tables, views, procedures, stages, and Streamlit apps
 
-### Setup
+### Deploy
 
-```sql
--- 1. Create database, schema, and tables
--- Run: sql/01_setup.sql
+Run the SQL files in this order:
 
--- 2. Load sample data
--- Run: sql/02_seed_data.sql
-
--- 3. Create the action board view
--- Run: sql/03_views.sql
-
--- 4. Deploy the agent procedure
--- Run: sql/04_stored_procedure.sql
-
--- 5. Run the agent
-CALL READINESSOPS.APP.SP_RUN_READINESS_AGENT('RUN_001');
-
--- 6. Verify results
--- Run: sql/06_verify_agent_run.sql
-
--- 7. Deploy Streamlit dashboard (optional)
-CREATE STAGE IF NOT EXISTS READINESSOPS.APP.STREAMLIT_STAGE DIRECTORY = (ENABLE = TRUE);
--- Upload app/streamlit_app.py and app/environment.yml to the stage
-CREATE OR REPLACE STREAMLIT READINESSOPS.APP.READINESSOPS_DASHBOARD
-  ROOT_LOCATION = '@READINESSOPS.APP.STREAMLIT_STAGE'
-  MAIN_FILE = 'streamlit_app.py'
-  QUERY_WAREHOUSE = <YOUR_WAREHOUSE>;
+```text
+sql/01_setup.sql
+sql/02_seed_data.sql
+sql/03_views.sql
+sql/04_stored_procedure.sql
+sql/10_governance_model.sql
+sql/11_governance_review_procedure.sql
+sql/12_review_procedure.sql
+sql/13_publish_procedure.sql
+sql/14_dashboard_view_update.sql
+sql/15_validation_tests.sql
 ```
 
----
+The `04` procedure is retained as the earlier direct-write prototype. The governed workspace uses the `10`–`15` implementation.
+
+### Run a Governed Review
+
+```sql
+CALL SP_RUN_FULL_GOVERNANCE_REVIEW(
+  'RUN_001',
+  'Prioritize governance issues that could block executive approval within the next 90 days. Do not propose any gap, risk, or action that is not supported by the supplied assessment evidence.'
+);
+```
+
+Review proposals through Streamlit or call:
+
+```sql
+CALL SP_REVIEW_AGENT_PROPOSAL(
+  '<PROPOSAL_ID>',
+  'APPROVE',
+  'Reviewed against supplied evidence.'
+);
+```
+
+Publish approved proposals:
+
+```sql
+CALL SP_PUBLISH_AGENT_RUN('<AGENT_RUN_ID>');
+```
+
+## Verified Governance Lifecycle
+
+Validated in `READINESSOPS_VALIDATION.APP`:
+
+- Full review completed successfully
+- Latest demonstrated review generated 5 Gaps, 2 Risks, and 5 Actions
+- Gap approval and publication succeeded
+- Action approval and publication succeeded
+- Risk rejection succeeded
+- Rejected proposals were not written to canonical tables
+- Review comments remained attached to the correct proposal type
+- Gap and Action each produced approval and publication history records
+- Re-running publication did not create duplicate canonical records
+- The dashboard view excludes legacy `AR_%` direct-write records
 
 ## Repository Structure
 
-```
+```text
 solifan-readinessops/
-├── README.md                  ← You are here
-├── COPYRIGHT.md               ← Copyright and use terms
-├── .gitignore
-├── SECURITY.md
+├── README.md
 ├── app/
-│   ├── streamlit_app.py       ← Streamlit dashboard
-│   ├── environment.yml        ← Conda environment
-│   └── README.md              ← Deployment instructions
-├── sql/
-│   ├── 01_setup.sql           ← Database + table DDL
-│   ├── 02_seed_data.sql       ← Synthetic sample data
-│   ├── 03_views.sql           ← Action board view
-│   ├── 04_stored_procedure.sql ← AI agent procedure
-│   ├── 05_run_agent.sql       ← Execute agent
-│   ├── 06_verify_agent_run.sql ← Verification queries
-│   └── 07_cleanup_generated_data.sql ← Remove AI output
-├── prompts/
-│   └── readiness_agent_prompt.md ← LLM prompt documentation
+│   ├── streamlit_app.py
+│   ├── environment.yml
+│   └── README.md
+├── assets/
+│   └── screenshots/
+│       ├── app_ss_01.png
+│       ├── app_ss_02.png
+│       └── app_ss_03.png
 ├── docs/
-│   ├── architecture.md        ← System design + Mermaid diagrams
-│   ├── demo-guide.md          ← 3-5 minute demo script
-│   ├── hackathon-submission.md ← Evaluation criteria mapping
-│   └── implementation-notes.md ← Debugging history
-└── assets/
-    └── screenshots/
-        ├── app_ss_01.png          ← Dashboard and Gap Board
-        └── app_ss_02.png          ← Recommended Actions and Agent Run History
+│   ├── GOVERNANCE_AGENT_CURRENT_STATE.md
+│   ├── architecture.md
+│   ├── demo-guide.md
+│   ├── hackathon-submission.md
+│   └── implementation-notes.md
+├── prompts/
+│   └── readiness_agent_prompt.md
+└── sql/
+    ├── 01_setup.sql
+    ├── 02_seed_data.sql
+    ├── 03_views.sql
+    ├── 04_stored_procedure.sql
+    ├── 05_run_agent.sql
+    ├── 06_verify_agent_run.sql
+    ├── 07_cleanup_generated_data.sql
+    ├── 10_governance_model.sql
+    ├── 11_governance_review_procedure.sql
+    ├── 12_review_procedure.sql
+    ├── 13_publish_procedure.sql
+    ├── 14_dashboard_view_update.sql
+    └── 15_validation_tests.sql
 ```
-
----
-
-## Demo Flow
-
-1. Show assessment data with mixed answer/evidence statuses
-2. Call `SP_RUN_READINESS_AGENT('RUN_001')`
-3. Query generated gaps (sorted by priority)
-4. Query generated actions (with owners and deadlines)
-5. Show audit trail (4 timestamped steps)
-6. Show action board view (denormalized output)
-
-See [docs/demo-guide.md](docs/demo-guide.md) for the full script.
-
----
-
-## Verified Results
-
-| Metric | Value |
-|--------|-------|
-| Gaps generated | 5 |
-| Actions generated | 5 |
-| Audit history rows | 4 |
-| FAILED rows | 0 |
-| Sample data preserved | Yes |
-| Transaction safety | Verified (rollback tested) |
-| Idempotent rerun | Verified |
-
----
 
 ## Relationship to SOLIFAN CCoE Readiness Studio
 
-ReadinessOps is a standalone AI agent prototype designed to demonstrate how
-automated gap analysis and action generation could complement the SOLIFAN
-CCoE Readiness Studio.
+ReadinessOps demonstrates the governed agent workflow behind the broader SOLIFAN CCoE Readiness Studio:
 
----
+```text
+Question → Evidence → Gap → Risk → Action
+```
+
+The purpose is not a one-time diagnosis. It is to support repeatable Enterprise AI Governance through assessment history, evidence traceability, human decisions, controlled publication, and operational follow-through.
 
 ## Current Limitations
 
-- Single LLM call per run (no batching for large question sets)
-- Fixed set of allowed owner roles in the prompt
-- No scheduling or automatic re-evaluation triggers
-- Model selection is hardcoded (`mistral-large2`)
-
----
+- Model selection is currently fixed to `mistral-large2`
+- The sample assessment is intentionally small and synthetic
+- Risk proposals are reviewed as first-class drafts; approved canonical publication follows the current governance model implementation
+- No automatic schedule or event trigger is included
+- Production deployments require role design, access policies, and environment-specific controls
 
 ## Public-Safe Disclaimer
 
-This repository contains only synthetic sample data created for demonstration
-purposes. No real organizational assessments, credentials, account identifiers,
-or proprietary information is included. All Snowflake connection details must be
-configured locally and are excluded via `.gitignore`.
-
----
+This repository contains only synthetic demonstration data. It does not contain real organizational assessments, credentials, account identifiers, or proprietary customer information.
 
 ## Copyright and Use
 
 Copyright © 2026 SOLIFAN LLC. All rights reserved.
 
-This repository is published solely for hackathon evaluation and technical demonstration.
-
-No license is granted to use, copy, modify, distribute, sublicense, commercialize, or create derivative works from the source code, prompts, schemas, documentation, screenshots, or other materials in this repository without prior written permission from SOLIFAN LLC.
+This repository is published solely for hackathon evaluation and technical demonstration. No license is granted to use, copy, modify, distribute, sublicense, commercialize, or create derivative works from the source code, prompts, schemas, documentation, screenshots, or other materials without prior written permission from SOLIFAN LLC.
