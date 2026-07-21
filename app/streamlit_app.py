@@ -4,6 +4,12 @@ import json
 
 session = get_active_session()
 
+def rerun_app():
+    if hasattr(st, "rerun"):
+        st.rerun()
+    else:
+        st.experimental_rerun()
+
 st.set_page_config(page_title="ReadinessOps", layout="wide")
 
 st.markdown("""
@@ -224,7 +230,7 @@ if run_btn:
                 }
 
                 st.session_state.gov_running = False
-                st.rerun()
+                rerun_app()
             else:
                 st.error(
                     f"Review failed: {result_json.get('error', 'Unknown error')}"
@@ -241,6 +247,10 @@ st.divider()
 # PROPOSAL REVIEW
 # ============================================================
 st.header("Proposal Review")
+
+last_proposal_action = st.session_state.pop("last_proposal_action", None)
+if last_proposal_action:
+    st.success(last_proposal_action)
 
 if latest_agent_run_id:
     st.info(
@@ -271,55 +281,171 @@ proposals_df = session.sql(f"""
     ORDER BY PROPOSAL_TYPE, PRIORITY DESC
 """).to_pandas()
 if proposals_df.empty:
-    st.info("No proposals for this run. Run a Full Governance Review to generate proposals.")
+    st.info("No proposals for this review.")
 else:
-    tab_gaps, tab_risks, tab_actions = st.tabs(["Gap Proposals", "Risk Proposals", "Action Proposals"])
+    proposal_type_label = st.radio(
+        "Proposal type",
+        options=[
+            "Gap Proposals",
+            "Risk Proposals",
+            "Action Proposals",
+        ],
+        horizontal=True,
+        key="proposal_type_selector",
+    )
 
-    for tab, ptype in [(tab_gaps, 'GAP'), (tab_risks, 'RISK'), (tab_actions, 'ACTION')]:
-        with tab:
-            type_df = proposals_df[proposals_df['PROPOSAL_TYPE'] == ptype]
-            if type_df.empty:
-                st.info(f"No {ptype.lower()} proposals.")
-                continue
+    proposal_type_map = {
+        "Gap Proposals": "GAP",
+        "Risk Proposals": "RISK",
+        "Action Proposals": "ACTION",
+    }
 
-            for _, row in type_df.iterrows():
-                with st.container():
-                    status_icon = {"REVIEW_REQUIRED": "🔶", "APPROVED": "✅", "REJECTED": "❌", "PUBLISHED": "📋"}.get(row['STATUS'], "⬜")
-                    st.markdown(f"**{status_icon} {row['TITLE']}** — {row['SEVERITY']} (Priority: {row['PRIORITY']})")
-                    st.markdown(f"_{row['DESCRIPTION']}_")
+    ptype = proposal_type_map[proposal_type_label]
+    type_df = proposals_df[
+        proposals_df["PROPOSAL_TYPE"] == ptype
+    ]
 
-                    if row['RATIONALE']:
-                        st.caption(f"Rationale: {row['RATIONALE']}")
+    st.caption(
+        f"Showing {len(type_df)} {ptype.lower()} proposals "
+        "from the latest completed review."
+    )
 
-                    if ptype == 'ACTION' and row['RECOMMENDED_OWNER']:
-                        st.caption(f"Owner: {row['RECOMMENDED_OWNER']} | Due: {row['RECOMMENDED_DUE_DATE']} days")
+    if type_df.empty:
+        st.info(f"No {ptype.lower()} proposals.")
+    else:
+        for _, row in type_df.iterrows():
+            with st.container():
+                status_label = {
+                    "REVIEW_REQUIRED": "[DRAFT]",
+                    "APPROVED": "[APPROVED]",
+                    "REJECTED": "[REJECTED]",
+                    "PUBLISHED": "[PUBLISHED]",
+                }.get(row["STATUS"], "[UNKNOWN]")
 
-                    # Source details
-                    sources = session.sql(f"SELECT QUESTION_ID, ANSWER_TEXT, EVIDENCE_ITEM_ID, SOURCE_SUMMARY FROM GOVERNANCE_AGENT_PROPOSAL_SOURCE WHERE PROPOSAL_ID = '{row['PROPOSAL_ID']}'").to_pandas()
-                    if not sources.empty:
-                        with st.expander(f"Sources ({len(sources)})"):
-                            for _, src in sources.iterrows():
-                                st.text(src['SOURCE_SUMMARY'])
+                st.markdown(
+                    f"**{status_label} {row['TITLE']}** - "
+                    f"{row['SEVERITY']} "
+                    f"(Priority: {row['PRIORITY']})"
+                )
 
-                    # Review actions
-                    if row['STATUS'] == 'REVIEW_REQUIRED':
-                        rcol1, rcol2, rcol3 = st.columns([2, 1, 1])
-                        comment_key = f"comment_{row['PROPOSAL_ID']}"
-                        with rcol1:
-                            comment = st.text_input("Comment", key=comment_key, placeholder="Optional review comment")
-                        with rcol2:
-                            if st.button("Approve", key=f"approve_{row['PROPOSAL_ID']}"):
-                                session.sql(f"CALL SP_REVIEW_AGENT_PROPOSAL('{row['PROPOSAL_ID']}', 'APPROVE', '{comment}')").collect()
-                                st.rerun()
-                        with rcol3:
-                            if st.button("Reject", key=f"reject_{row['PROPOSAL_ID']}"):
-                                session.sql(f"CALL SP_REVIEW_AGENT_PROPOSAL('{row['PROPOSAL_ID']}', 'REJECT', '{comment}')").collect()
-                                st.rerun()
+                st.markdown(f"_{row['DESCRIPTION']}_")
 
-                    st.markdown("---")
+                if row["RATIONALE"]:
+                    st.caption(
+                        f"Rationale: {row['RATIONALE']}"
+                    )
+
+                if (
+                    ptype == "ACTION"
+                    and row["RECOMMENDED_OWNER"]
+                ):
+                    st.caption(
+                        f"Owner: {row['RECOMMENDED_OWNER']} | "
+                        f"Due: {row['RECOMMENDED_DUE_DATE']} days"
+                    )
+
+                safe_proposal_id = str(
+                    row["PROPOSAL_ID"]
+                ).replace("'", "''")
+
+                sources = session.sql(f"""
+                    SELECT
+                        QUESTION_ID,
+                        ANSWER_TEXT,
+                        EVIDENCE_ITEM_ID,
+                        SOURCE_SUMMARY
+                    FROM GOVERNANCE_AGENT_PROPOSAL_SOURCE
+                    WHERE PROPOSAL_ID = '{safe_proposal_id}'
+                """).to_pandas()
+
+                if not sources.empty:
+                    with st.expander(
+                        f"Sources ({len(sources)})"
+                    ):
+                        for _, src in sources.iterrows():
+                            st.text(src["SOURCE_SUMMARY"])
+
+                if row["STATUS"] == "REVIEW_REQUIRED":
+                    rcol1, rcol2, rcol3 = st.columns(
+                        [2, 1, 1]
+                    )
+
+                    comment_key = (
+                        f"comment_{row['PROPOSAL_ID']}"
+                    )
+
+                    with rcol1:
+                        comment = st.text_input(
+                            "Comment",
+                            key=comment_key,
+                            placeholder=(
+                                "Optional review comment"
+                            ),
+                        )
+
+                    with rcol2:
+                        if st.button(
+                            "Approve",
+                            key=(
+                                f"approve_"
+                                f"{row['PROPOSAL_ID']}"
+                            ),
+                        ):
+                            safe_comment = comment.replace(
+                                "'", "''"
+                            )
+
+                            session.sql(
+                                f"CALL "
+                                f"SP_REVIEW_AGENT_PROPOSAL("
+                                f"'{safe_proposal_id}', "
+                                f"'APPROVE', "
+                                f"'{safe_comment}')"
+                            ).collect()
+
+                            st.session_state[
+                                "last_proposal_action"
+                            ] = (
+                                f"Approved: "
+                                f"{row['TITLE']} "
+                                f"(comment saved)"
+                            )
+
+                            rerun_app()
+
+                    with rcol3:
+                        if st.button(
+                            "Reject",
+                            key=(
+                                f"reject_"
+                                f"{row['PROPOSAL_ID']}"
+                            ),
+                        ):
+                            safe_comment = comment.replace(
+                                "'", "''"
+                            )
+
+                            session.sql(
+                                f"CALL "
+                                f"SP_REVIEW_AGENT_PROPOSAL("
+                                f"'{safe_proposal_id}', "
+                                f"'REJECT', "
+                                f"'{safe_comment}')"
+                            ).collect()
+
+                            st.session_state[
+                                "last_proposal_action"
+                            ] = (
+                                f"Rejected: "
+                                f"{row['TITLE']} "
+                                f"(comment saved)"
+                            )
+
+                            rerun_app()
+
+                st.markdown("---")
 
 st.divider()
-
 # ============================================================
 # PUBLISH
 # ============================================================
