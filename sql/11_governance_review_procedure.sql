@@ -16,8 +16,6 @@ BEGIN
     LET v_input_fingerprint VARCHAR;
     LET v_run_exists INTEGER;
 
-    USE SCHEMA READINESSOPS_VALIDATION.APP;
-
     v_run_exists := (SELECT COUNT(*) FROM ASSESSMENT_RUNS WHERE RUN_ID = :P_ASSESSMENT_RUN_ID);
     IF (:v_run_exists = 0) THEN
         RETURN '{"status":"FAILED","error":"Assessment Run not found"}';
@@ -54,8 +52,8 @@ BEGIN
                 '\n'
             ) WITHIN GROUP (ORDER BY q.SORT_ORDER) ||
             '\n\nOUTPUT: Return a JSON object with three arrays: gaps, risks, actions.' ||
-            '\nEach gap and risk: {"question_id":"...","severity":"HIGH|MEDIUM|LOW","priority":1-100,"title":"...","description":"...","rationale":"..."}' ||
-            '\nEach action: {"question_id":"...","severity":"HIGH|MEDIUM|LOW","priority":1-100,"title":"...","description":"...","rationale":"...","recommended_owner":"...","due_in_days":14|30|60|90}' ||
+            '\nEach gap and risk: {"question_id":"...","severity":"HIGH|MEDIUM|LOW","priority":60|70|80|90|95,"title":"...","description":"...","rationale":"..."}' ||
+            '\nEach action: {"question_id":"...","severity":"HIGH|MEDIUM|LOW","priority":60|70|80|90|95,"title":"...","description":"...","rationale":"...","recommended_owner":"...","due_in_days":14|30|60|90}' ||
             '\nrecommended_owner: Risk Manager, Data Governance Lead, Program Lead, PMO Lead, or Security Lead' ||
             '\nRespond ONLY with valid JSON. No markdown fences.' ||
             '\n{"gaps":[...],"risks":[...],"actions":[...]}'
@@ -88,7 +86,26 @@ BEGIN
         :v_agent_run_id, :P_ASSESSMENT_RUN_ID, 'GAP',
         f.VALUE:question_id::VARCHAR,
         f.VALUE:title::VARCHAR, f.VALUE:description::VARCHAR, f.VALUE:severity::VARCHAR,
-        COALESCE(TRY_CAST(f.VALUE:priority::VARCHAR AS INTEGER), 50),
+        CASE
+            WHEN TRY_CAST(f.VALUE:priority::VARCHAR AS INTEGER) BETWEEN 1 AND 5 THEN
+                CASE TRY_CAST(f.VALUE:priority::VARCHAR AS INTEGER)
+                    WHEN 5 THEN 95
+                    WHEN 4 THEN 90
+                    WHEN 3 THEN 80
+                    WHEN 2 THEN 70
+                    ELSE 60
+                END
+            ELSE LEAST(
+                100,
+                GREATEST(
+                    1,
+                    COALESCE(
+                        TRY_CAST(f.VALUE:priority::VARCHAR AS INTEGER),
+                        50
+                    )
+                )
+            )
+        END,
         f.VALUE:rationale::VARCHAR, 'REVIEW_REQUIRED'
     FROM TABLE(FLATTEN(:v_parsed:gaps)) f;
 
@@ -101,7 +118,26 @@ BEGIN
         :v_agent_run_id, :P_ASSESSMENT_RUN_ID, 'RISK',
         f.VALUE:question_id::VARCHAR,
         f.VALUE:title::VARCHAR, f.VALUE:description::VARCHAR, f.VALUE:severity::VARCHAR,
-        COALESCE(TRY_CAST(f.VALUE:priority::VARCHAR AS INTEGER), 50),
+        CASE
+            WHEN TRY_CAST(f.VALUE:priority::VARCHAR AS INTEGER) BETWEEN 1 AND 5 THEN
+                CASE TRY_CAST(f.VALUE:priority::VARCHAR AS INTEGER)
+                    WHEN 5 THEN 95
+                    WHEN 4 THEN 90
+                    WHEN 3 THEN 80
+                    WHEN 2 THEN 70
+                    ELSE 60
+                END
+            ELSE LEAST(
+                100,
+                GREATEST(
+                    1,
+                    COALESCE(
+                        TRY_CAST(f.VALUE:priority::VARCHAR AS INTEGER),
+                        50
+                    )
+                )
+            )
+        END,
         f.VALUE:rationale::VARCHAR, 'REVIEW_REQUIRED'
     FROM TABLE(FLATTEN(:v_parsed:risks)) f;
 
@@ -114,7 +150,26 @@ BEGIN
         :v_agent_run_id, :P_ASSESSMENT_RUN_ID, 'ACTION',
         f.VALUE:question_id::VARCHAR,
         f.VALUE:title::VARCHAR, f.VALUE:description::VARCHAR, f.VALUE:severity::VARCHAR,
-        COALESCE(TRY_CAST(f.VALUE:priority::VARCHAR AS INTEGER), 50),
+        CASE
+            WHEN TRY_CAST(f.VALUE:priority::VARCHAR AS INTEGER) BETWEEN 1 AND 5 THEN
+                CASE TRY_CAST(f.VALUE:priority::VARCHAR AS INTEGER)
+                    WHEN 5 THEN 95
+                    WHEN 4 THEN 90
+                    WHEN 3 THEN 80
+                    WHEN 2 THEN 70
+                    ELSE 60
+                END
+            ELSE LEAST(
+                100,
+                GREATEST(
+                    1,
+                    COALESCE(
+                        TRY_CAST(f.VALUE:priority::VARCHAR AS INTEGER),
+                        50
+                    )
+                )
+            )
+        END,
         f.VALUE:rationale::VARCHAR, f.VALUE:recommended_owner::VARCHAR,
         COALESCE(TRY_CAST(f.VALUE:due_in_days::VARCHAR AS INTEGER), 30),
         'REVIEW_REQUIRED'

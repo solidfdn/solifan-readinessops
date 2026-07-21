@@ -5,7 +5,6 @@ EXECUTE AS CALLER
 AS
 $$
 BEGIN
-    USE SCHEMA READINESSOPS_VALIDATION.APP;
 
     LET v_run_exists INTEGER;
     LET v_approved_count INTEGER;

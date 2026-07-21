@@ -5,7 +5,6 @@ EXECUTE AS CALLER
 AS
 $$
 BEGIN
-    USE SCHEMA READINESSOPS_VALIDATION.APP;
 
     LET v_current_status VARCHAR;
     LET v_new_status VARCHAR;
