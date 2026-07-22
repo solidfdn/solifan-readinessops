@@ -40,3 +40,18 @@ desktop.ini
 output/
 tmp/
 temp/
+
+# Local ReadinessOps validation and patch artifacts
+/_audit/
+/_backup/
+/_final/
+/_patches/
+/READINESSOPS_CURRENT.zip
+/streamlit_execute_debug.txt
+/00_collect_readinessops_current_state_v2.ps1
+/restore_legacy_streamlit.sql
+/snowflake.yml
+/snowflake.yml.before_*
+/app/*.backup_*
+/app/*.failed_*.py
+/app/*.before_bool_fix_*
