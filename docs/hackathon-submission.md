@@ -33,18 +33,17 @@ ReadinessOps separates AI analysis from governance authority:
 
 ## Application Screenshots
 
-### Governance Review
+### Governance Review Summary
 
-![Governance review](../assets/screenshots/app_ss_01.png)
+![Governance review summary](../assets/screenshots/app_ss_01.png)
 
-### Human Review
+### Natural-Language AI Review Setup
 
-![Human review](../assets/screenshots/app_ss_02.png)
+![Natural-language AI review setup](../assets/screenshots/app_ss_02.png)
 
-### Controlled Publish
+### Human Decision and Publication Audit
 
-![Controlled publish](../assets/screenshots/app_ss_03.png)
-
+![Human decision and publication audit](../assets/screenshots/app_ss_03.png)
 ## Evaluation Criteria Mapping
 
 ### Technical Execution

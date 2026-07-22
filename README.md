@@ -34,18 +34,23 @@ Question + Answer + Evidence + Rule
 
 ## Screenshots
 
-### Governance Review
+### Governance Review Summary
 
-![Governance review](assets/screenshots/app_ss_01.png)
+The workspace shows evidence status, the latest agent run, proposal counts, and the human-review queue.
 
-### Human Review
+![Governance review summary](assets/screenshots/app_ss_01.png)
 
-![Human review](assets/screenshots/app_ss_02.png)
+### Natural-Language AI Review Setup
 
-### Controlled Publish
+Reviewers can add a business-priority instruction before Cortex generates a new set of evidence-grounded draft proposals.
 
-![Controlled publish](assets/screenshots/app_ss_03.png)
+![Natural-language AI review setup](assets/screenshots/app_ss_02.png)
 
+### Human Decision and Publication Audit
+
+Every approval, rejection, and publication remains attributable to an actor, timestamp, proposal, and state transition.
+
+![Human decision and publication audit](assets/screenshots/app_ss_03.png)
 ## Architecture
 
 ```mermaid
