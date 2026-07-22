@@ -2,178 +2,194 @@
 
 ## Goal
 
-Demonstrate that ReadinessOps is not an autonomous direct-write agent. It is a governed operating workflow:
+Demonstrate a governed operating workflow rather than an autonomous direct-write agent:
 
 ```text
 Assessment evidence
+→ natural-language review priority
 → AI-generated drafts
-→ Human approval or rejection
-→ Controlled publication
-→ Canonical dashboard records
+→ human approval or rejection
+→ controlled publication
+→ governed record and audit trail
 ```
 
 ## Prerequisites
 
 - Snowflake account with Cortex AI enabled
 - Access to `mistral-large2`
-- Governance SQL files `10`–`15` deployed
-- Streamlit app deployed
+- Governed SQL path `01`–`03` and `10`–`14` deployed
+- Streamlit app deployed as `READINESSOPS_DASHBOARD`
 - Synthetic Assessment Run `RUN_001`
+- No approved-but-unpublished proposal left from a previous rehearsal
 
-## Demo Script — 4 to 6 Minutes
+## Four-Minute Demo
 
-### 1. Establish the Governance Problem
+### 0:00–0:30 — Establish the control boundary
 
-Explain:
+Show the four steps at the top of the application.
 
-> Enterprise AI governance cannot rely on an AI model writing directly into the system of record. ReadinessOps uses AI to generate evidence-grounded proposals, then requires a human decision before publication.
+Say:
 
-### 2. Show the Assessment Context
+> ReadinessOps starts with assessment evidence. Cortex proposes Gap, Risk, and Action drafts, but the model cannot approve or publish its own output. A person decides, and a separate publication step creates the governed record.
 
-```sql
-SELECT
-  q.QUESTION_ID,
-  q.QUESTION_TEXT,
-  q.EXPECTED_EVIDENCE,
-  a.ANSWER_STATUS,
-  a.ANSWER_TEXT,
-  e.EVIDENCE_STATUS,
-  e.EVIDENCE_TEXT
-FROM ASSESSMENT_ANSWERS a
-JOIN READINESS_QUESTIONS q
-  ON a.QUESTION_ID = q.QUESTION_ID
-LEFT JOIN EVIDENCE_ITEMS e
-  ON a.RUN_ID = e.RUN_ID
- AND a.QUESTION_ID = e.QUESTION_ID
-WHERE a.RUN_ID = 'RUN_001'
-ORDER BY q.SORT_ORDER;
-```
+Show the four metrics:
 
-Point out that proposals must be supported by the supplied Question, Answer, Evidence, and Rule context.
+- Evidence not yet verified
+- Needs human decision
+- Approved, not published
+- Published governance records
 
-### 3. Run a Full Governance Review
+Counts vary as the demo is repeated. Explain the meaning of the metrics rather than relying on fixed numbers.
 
-In Streamlit, enter an optional instruction such as:
+### 0:30–1:10 — Use natural language at the governed entry point
+
+Open **Review setup**.
+
+Enter:
 
 ```text
 Prioritize governance issues that could block executive approval within the next 90 days. Do not propose any gap, risk, or action that is not supported by the supplied assessment evidence.
 ```
 
-Click **Run Full Governance Review**.
-
-SQL equivalent:
-
-```sql
-CALL SP_RUN_FULL_GOVERNANCE_REVIEW(
-  'RUN_001',
-  'Prioritize governance issues that could block executive approval within the next 90 days. Do not propose any gap, risk, or action that is not supported by the supplied assessment evidence.'
-);
-```
+Select **Generate AI draft proposals**.
 
 Show:
 
-- Agent status
+- Agent Run ID
 - Model
-- Completed timestamp
-- Additional instruction used
+- Completion time
+- Additional instruction
 - Generated Gap, Risk, and Action counts
-
-### 4. Review the Drafts
-
-Open **Proposal Review**.
-
-Demonstrate that:
-
-- Gap, Risk, and Action are selected explicitly
-- Each item starts as `[DRAFT]`
-- Source context is expandable
-- A comment can be entered
-- Approve and Reject are separate decisions
-- The selected proposal type remains stable after the app reruns
-
-Approve one Gap, reject one Risk, and approve one Action.
-
-### 5. Show Controlled Publication
-
-Scroll to **Publish Approved Proposals**.
-
-Confirm that the counters show only approved items. Check the confirmation box and publish once.
-
-Expected demonstration:
-
-- Approved Gap becomes `PUBLISHED`
-- Approved Action becomes `PUBLISHED`
-- Rejected Risk remains `REJECTED`
-- No canonical Risk record is created from the rejected proposal
-
-### 6. Verify in SQL
-
-```sql
-SELECT
-  PROPOSAL_TYPE,
-  TITLE,
-  STATUS,
-  REVIEW_COMMENT,
-  PUBLISHED_ENTITY_ID
-FROM GOVERNANCE_AGENT_PROPOSAL
-WHERE AGENT_RUN_ID = '<AGENT_RUN_ID>'
-ORDER BY PROPOSAL_TYPE, PRIORITY DESC;
-```
-
-```sql
-SELECT COUNT(*) AS PUBLISHED_GAPS
-FROM READINESS_GAPS
-WHERE SOURCE_AGENT_RUN_ID = '<AGENT_RUN_ID>';
-```
-
-```sql
-SELECT COUNT(*) AS PUBLISHED_ACTIONS
-FROM RECOMMENDED_ACTIONS
-WHERE SOURCE_AGENT_RUN_ID = '<AGENT_RUN_ID>';
-```
-
-```sql
-SELECT
-  p.PROPOSAL_TYPE,
-  p.STATUS,
-  COUNT(h.PROPOSAL_ID) AS HISTORY_RECORDS
-FROM GOVERNANCE_AGENT_PROPOSAL p
-LEFT JOIN GOVERNANCE_APPROVAL_HISTORY h
-  ON h.PROPOSAL_ID = p.PROPOSAL_ID
-WHERE p.AGENT_RUN_ID = '<AGENT_RUN_ID>'
-GROUP BY p.PROPOSAL_TYPE, p.STATUS
-ORDER BY p.PROPOSAL_TYPE;
-```
-
-### 7. Show the Dashboard Boundary
 
 Explain:
 
-> Draft, approved-but-unpublished, and rejected proposals do not appear as new canonical dashboard records. The dashboard reads the governed presentation view and excludes legacy `AR_%` direct-write records.
+> The additional instruction changes business priority, not the control boundary. The fixed instruction still requires every proposal to be supported by Question, Answer, Evidence, and Rule Context.
 
-## Verified Demonstration Result
+### 1:10–2:15 — Inspect one issue and make a human decision
 
-The final UI and database validation produced:
+Open **Review queue** and then **Review by issue**.
 
-| Item | Result |
-|---|---|
-| Gap review | Approved, then published |
-| Risk review | Rejected |
-| Action review | Approved, then published |
-| Published Gap count | 1 |
-| Published Action count | 1 |
-| Rejected Risk canonical count | 0 |
-| Gap history | Approval + publication |
-| Action history | Approval + publication |
-| Risk history | Rejection |
-| Duplicate publication | Prevented |
+The first issue may already be displayed. Use it directly unless a different demo issue is needed.
 
-## Talking Points
+Show:
 
-- Snowflake-native end to end
-- Cortex AI does analysis, not final governance decision-making
-- Human review is explicit and traceable
-- Publication is separate from approval
-- Evidence grounding is visible before approval
-- Assessment and agent-run history support repeatable governance operations
-- The workflow maps directly to `Question → Evidence → Gap → Risk → Action`
+- Current Answer
+- Evidence
+- Requirement / Rule Context
+- Related Gap, Risk, and Action tabs
+- **Why the AI raised this proposal**
+- Source traceability
+
+Open an Action proposal.
+
+Enter a Decision comment:
+
+```text
+DEMO_APPROVE — reviewed against the supplied evidence and current governance requirement.
+```
+
+Select **Approve**.
+
+Show the metric change:
+
+- Needs human decision decreases by 1
+- Approved, not published increases by 1
+- Published governance records does not change
+
+Explain:
+
+> Approval records the human decision, but it still does not create the governed record.
+
+### 2:15–3:00 — Publish explicitly
+
+Open **Approved & publish**.
+
+Review the approved proposal list, select the confirmation checkbox, and choose **Publish approved proposals**.
+
+Show the metric change:
+
+- Approved, not published returns to 0
+- Published governance records increases
+- The published Action count increases for an Action proposal
+
+Explain:
+
+> Publication is a separate authority boundary. The procedure publishes only proposals that were already approved and uses the Source Proposal ID to prevent duplicate canonical writes.
+
+### 3:00–3:35 — Inspect the governed record
+
+Open **Published records**.
+
+Select the newly published item and show:
+
+- Record type
+- Description
+- Owner and target, when applicable
+- Assessment Question
+- Source Proposal
+- Agent Run
+
+Explain:
+
+> A published record remains traceable to the evidence context and the AI proposal that produced it.
+
+### 3:35–4:00 — Verify the decision history
+
+Open **Audit trail**.
+
+Show the two latest events:
+
+1. `PUBLISH`
+2. `APPROVE`
+
+Show the actor, time, previous and new state, and comment.
+
+Close with:
+
+> AI proposes, people decide, and the system preserves the basis and history of the decision. ReadinessOps is an operating layer for Enterprise AI Governance, not a one-time diagnosis.
+
+## Empty Publication State
+
+When there are no approved proposals waiting for publication, the page displays:
+
+```text
+No approved proposals are waiting to be published.
+← Back to review queue
+```
+
+Use **Back to review queue** rather than navigating through the top-level Workspace selector.
+
+## SQL Verification
+
+Run the read-only final validation:
+
+```powershell
+snow sql `
+  -c "<SNOWFLAKE_CLI_CONNECTION>" `
+  -f "sql/18_hackathon_final_validation.sql"
+```
+
+The validation checks:
+
+- Required procedures
+- Latest-run source traceability
+- Proposal states
+- Audit actor and timestamp completeness
+- Duplicate canonical records
+- Duplicate publication history
+- Published-record traceability
+- Production Streamlit object
+- Absence of hackathon-only Streamlit objects
+
+## Demonstrated Result
+
+The verified lifecycle includes:
+
+- 5 Gap, 2 Risk, and 5 Action drafts in a completed review
+- Gap approval and publication
+- Risk rejection without publication
+- Action approval and publication
+- Separate approval and publication events
+- Duplicate publication prevention
+- One-based list numbering
+- Production dashboard verification

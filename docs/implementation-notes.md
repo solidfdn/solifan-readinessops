@@ -2,134 +2,192 @@
 
 ## Scope
 
-This document records the principal implementation and validation decisions for both the original readiness-gap prototype and the governed Governance Agent Workspace.
+This document records the implementation decisions and validated behavior of the governed ReadinessOps workflow. The earlier direct-write prototype remains in files `04`–`07` for historical comparison only.
 
-## Original Prototype Findings
+## Governed Data Flow
 
-### Cortex COMPLETE May Return Markdown Fences
+```text
+Assessment context
+→ Cortex draft generation
+→ REVIEW_REQUIRED proposal
+→ Human APPROVED or REJECTED
+→ Explicit publication
+→ Governed record
+```
 
-Even when instructed to return raw JSON, model output can contain markdown fences.
+## Model Output Handling
 
-**Resolution:** Strip optional fences before parsing and use `TRY_PARSE_JSON`.
+### Markdown fences
 
-### Safe Casting from VARIANT
+Cortex can return markdown fences even when JSON-only output is requested.
 
-`TRY_CAST` does not accept every direct VARIANT-to-number conversion.
+**Resolution:** remove optional fences before `TRY_PARSE_JSON`.
 
-**Resolution:** Convert JSON values to `VARCHAR` before numeric `TRY_CAST`.
+### Defensive casting
 
-### Transaction Boundaries
+Direct `VARIANT`-to-number conversion is not reliable for every model response.
 
-Cleanup performed before a transaction cannot be restored by rollback.
+**Resolution:** convert candidate values to `VARCHAR`, then apply numeric conversion and bounds.
 
-**Resolution:** Keep destructive legacy-prototype cleanup inside a transaction. The governed flow avoids deleting prior canonical output during proposal generation.
+### Priority normalization
 
-### Action-to-Gap Integrity
+The model may return a 1–5 scale even when a 1–100 range is requested.
 
-A loose join can create an action with no valid linked gap.
+**Resolution:**
 
-**Resolution:** Use validated join conditions and publish source identifiers.
+- Prompt values are constrained to `60`, `70`, `80`, `90`, or `95`
+- Procedure logic maps 1–5 to the governed range
+- Other values are bounded defensively
 
-## Governance Workspace Implementation
+### Failure behavior
 
-### Proposal Isolation
+Invalid model output must not create partial governed records.
 
-AI-generated results are written to `GOVERNANCE_AGENT_PROPOSAL` as `REVIEW_REQUIRED`, not to canonical tables.
+**Resolution:** mark the Agent Run `FAILED`, retain the error, and keep the latest completed review visible in the app.
 
-### Evidence Traceability
+## Proposal Isolation and Traceability
 
-`GOVERNANCE_AGENT_PROPOSAL_SOURCE` stores the source Question, Answer, Evidence, and Rule context used to support each proposal.
+### Proposal isolation
 
-### Human Review Procedure
+All AI results enter `GOVERNANCE_AGENT_PROPOSAL` as `REVIEW_REQUIRED`. Proposal generation does not write new rows to `READINESS_GAPS` or `RECOMMENDED_ACTIONS`.
+
+### Source traceability
+
+`GOVERNANCE_AGENT_PROPOSAL_SOURCE` preserves:
+
+- Question
+- Answer
+- Evidence item
+- Requirement / Rule Context
+- Source summary
+- Agent Run
+
+## Human Decision
 
 `SP_REVIEW_AGENT_PROPOSAL`:
 
-- Updates one proposal
 - Accepts `APPROVE` or `REJECT`
-- Stores review comment, reviewer, and time
-- Appends a decision event to `GOVERNANCE_APPROVAL_HISTORY`
+- Updates exactly one proposal
+- Records reviewer, time, and optional comment
+- Appends a decision event
+- Does not publish the proposal
 
-### Controlled Publication
+## Controlled Publication
 
 `SP_PUBLISH_AGENT_RUN`:
 
-- Selects approved proposals only
-- Publishes canonical Gap and Action records
-- Sets source proposal and agent-run IDs
+- Freezes approved proposals at the beginning of the call
+- Publishes only `APPROVED` proposals
+- Writes Gap and normalized Risk records to `READINESS_GAPS`
+- Writes Actions to `RECOMMENDED_ACTIONS`
+- Preserves Source Proposal and Agent Run identifiers
 - Changes proposal state to `PUBLISHED`
-- Records publication history
-- Prevents duplicate publication
+- Appends one publication event per proposal
+- Prevents duplicate governed writes and duplicate publication history
 
-### Priority Normalization
+## Risk Normalization
 
-The model occasionally returned a 1–5 priority scale despite the requested 1–100 format.
+The current canonical schema has no dedicated Risk table. Approved Risks are published to `READINESS_GAPS` with a `[RISK]` prefix. The application derives the displayed record type from the source proposal.
 
-**Resolution:**
+This is an explicit demonstration constraint, not a claim that Gap and Risk are the same enterprise object.
 
-- Prompt output values were constrained to `60|70|80|90|95`
-- Procedure logic maps 1–5 to 60–95 when needed
-- Other numeric output is bounded safely
+## Streamlit Decisions
 
-### Stored Procedure Portability
+### Issue-based review
 
-`USE SCHEMA` inside the SQL stored procedures caused an unsupported-statement error in execution.
-
-**Resolution:** Remove session-context statements from procedure bodies and deploy procedures in the target schema.
-
-### Streamlit Rerun Compatibility
-
-The deployed Streamlit runtime did not expose `st.rerun`.
-
-**Resolution:** Add a compatibility helper that uses `st.rerun` when available and otherwise calls `st.experimental_rerun`.
-
-### Encoding and Status Labels
-
-A Windows edit introduced malformed characters into the status-label mapping.
-
-**Resolution:** Replace decorative symbols with ASCII status labels:
-
-- `[DRAFT]`
-- `[APPROVED]`
-- `[REJECTED]`
-- `[PUBLISHED]`
-
-### Proposal-Type Review Safety
-
-The original tab interface returned to the Gap tab after Streamlit reruns. This created a risk that a reviewer could believe they were acting on a Risk while actually submitting an action against a Gap.
+The first review UI repeated evidence context for every proposal and produced an excessively long page.
 
 **Resolution:**
 
-- Replace tabs with a stateful radio selector
-- Use one explicit proposal type at a time
-- Preserve selection through reruns
-- Show a completion message after review
-- Validate comments and status by proposal type
+- Add a proposal Summary
+- Select one Assessment issue
+- Show Question, Answer, Evidence, and Rule Context once
+- Show only proposal types that exist for the selected issue
+- Use compact list-plus-detail patterns for Published records and Audit trail
+
+### Navigation state
+
+An empty publication queue initially left the reviewer without an obvious next action.
+
+**Resolution:** add **Back to review queue** and preserve the review subview in session state.
+
+### Runtime compatibility
+
+The target Snowflake Streamlit runtime did not support every current Streamlit argument.
+
+**Resolution:**
+
+- Avoid `hide_index`
+- Render one-based row numbers explicitly
+- Use native Python `bool` values for Streamlit boolean parameters
+- Use `st.rerun` with `st.experimental_rerun` fallback
+
+### Status language
+
+The application uses plain state descriptions:
+
+- Needs human decision
+- Approved — ready to publish
+- Rejected
+- Published
+
+## Deployment Decisions
+
+The verified production app is `READINESSOPS_DASHBOARD`.
+
+The deployment script:
+
+- Resolves the repository path dynamically
+- Uses parameters for connection, database, schema, warehouse, role, app, and stage
+- Uploads the Git-tracked app to a dedicated production stage
+- Leaves the legacy stage unchanged for rollback
+- Avoids hardcoded local user paths and account URLs
 
 ## Final Validation
 
-A controlled UI and SQL test validated the complete lifecycle:
+### AI generation
 
-| Proposal Type | Decision | Final State | Canonical Result | History |
-|---|---|---|---:|---:|
-| Gap | Approve, then publish | `PUBLISHED` | 1 Gap | 2 |
-| Risk | Reject | `REJECTED` | 0 | 1 |
-| Action | Approve, then publish | `PUBLISHED` | 1 Action | 2 |
+A completed review generated:
 
-Additional validation:
+| Proposal type | Count |
+|---|---:|
+| Gap | 5 |
+| Risk | 2 |
+| Action | 5 |
+| Total | 12 |
 
-- Latest Draft Proposals changed 12 → 11 → 10 → 9
-- Proposal-type selection remained stable after each rerun
-- Success messages appeared after review actions
-- Review comments stayed attached to the correct proposal
-- Published Gap and Action carried source agent-run and proposal IDs
-- Rejected Risk had no published entity ID
-- Repeat publication did not create duplicate canonical records
-- Dashboard view excluded legacy `AR_%` records
+### Human-governance lifecycle
 
-## Environment
+Validated behavior:
+
+- Gap approved and published
+- Risk rejected and not published
+- Action approved and published
+- A second Action approved and published during UI verification
+- Approval did not change governed-record counts
+- Publication changed governed-record counts
+- Approval and publication created separate history events
+- Repeat publication did not create duplicates
+- Published records retained Source Proposal and Agent Run identifiers
+
+### UI
+
+Validated behavior:
+
+- Summary defaults to proposals needing a human decision
+- Review by issue shows only relevant proposal-type tabs
+- Published records use list plus selected detail
+- Audit trail uses latest events plus selected detail
+- Visible list numbering starts at 1
+- Empty publication queue includes **Back to review queue**
+- Production dashboard loaded without a Python Interpreter Error
+
+## Environment Used for Demonstration
 
 - Database: `READINESSOPS_VALIDATION`
 - Schema: `APP`
 - Streamlit app: `READINESSOPS_DASHBOARD`
 - Model: `mistral-large2`
-- Demonstrated agent run: `GR_20260720_235320_879`
+- Synthetic Assessment Run: `RUN_001`
+
+Counts in the live application change after each demo. Documents describe state transitions and verified behavior rather than treating one screenshot count as a permanent invariant.

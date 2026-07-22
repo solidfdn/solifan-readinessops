@@ -1,73 +1,98 @@
-# Streamlit App — ReadinessOps Governance Workspace
+# Streamlit App — ReadinessOps Governance Review
+
+## Purpose
+
+`streamlit_app.py` is the human-governed review workspace for the current ReadinessOps implementation.
+
+The application separates:
+
+```text
+Evidence context
+→ AI proposal
+→ Human decision
+→ Controlled publication
+→ Governed record and audit trail
+```
 
 ## Files
 
 | File | Purpose |
 |---|---|
 | `streamlit_app.py` | Main Streamlit in Snowflake application |
-| `environment.yml` | Conda environment |
+| `environment.yml` | Optional dependency declaration for packaging approaches that use it; the verified production deployment uploads the Python app directly |
+
+## Workspaces
+
+### Review queue
+
+- Summary of proposals awaiting a human decision
+- Issue-based review so Question, Answer, Evidence, and Rule Context appear once
+- Gap, Risk, and Action proposal tabs shown only when that proposal type exists
+- Decision status, domain, and severity filters
+- Approve and Reject actions with an optional comment
+- Approved-proposal publication queue
+- Explicit **Back to review queue** action when no proposals await publication
+
+### Published records
+
+- Governed Gap, normalized Risk, and Action records
+- Compact list plus one selected record detail
+- Source Proposal and Agent Run traceability
+
+### Audit trail
+
+- Latest decision and publication events
+- Compact list plus selected event detail
+- Actor, timestamp, state transition, proposal, and comment
+
+### Review setup
+
+- Assessment context preview
+- Standard evidence-grounding instruction
+- Optional natural-language business instruction
+- Cortex proposal generation
+- Latest completed run and generated counts
+
+## Runtime Compatibility
+
+The application includes compatibility handling for the deployed Snowflake Streamlit runtime:
+
+- `st.rerun` with fallback to `st.experimental_rerun`
+- Dataframe rendering without unsupported `hide_index`
+- One-based visible row numbering
+- Native Python `bool` values for Streamlit boolean parameters
 
 ## Deployment
 
-```sql
-CREATE STAGE IF NOT EXISTS READINESSOPS.APP.STREAMLIT_STAGE
-  DIRECTORY = (ENABLE = TRUE);
+Use the parameterized production script from the repository root:
 
-PUT file://app/streamlit_app.py
-  @READINESSOPS.APP.STREAMLIT_STAGE
-  OVERWRITE = TRUE
-  AUTO_COMPRESS = FALSE;
-
-PUT file://app/environment.yml
-  @READINESSOPS.APP.STREAMLIT_STAGE
-  OVERWRITE = TRUE
-  AUTO_COMPRESS = FALSE;
-
-CREATE OR REPLACE STREAMLIT READINESSOPS.APP.READINESSOPS_DASHBOARD
-  ROOT_LOCATION = '@READINESSOPS.APP.STREAMLIT_STAGE'
-  MAIN_FILE = 'streamlit_app.py'
-  QUERY_WAREHOUSE = '<YOUR_WAREHOUSE>';
+```powershell
+.\scripts\deploy_production_dashboard.ps1 `
+  -ConnectionName "<SNOWFLAKE_CLI_CONNECTION>" `
+  -Database "READINESSOPS_VALIDATION" `
+  -Schema "APP" `
+  -Warehouse "READINESSOPS_WH" `
+  -Role "ACCOUNTADMIN"
 ```
 
-## Features
+The script:
 
-- Assessment Run selector
-- Questions, Published Gaps, Latest Draft Proposals, and Agent Status metrics
-- Latest Governance Review status, model, completion time, instruction, and generated counts
-- Standard governance instruction display
-- Optional business-priority instruction
-- Assessment-context preview
-- Full governance review execution
-- Explicit Gap, Risk, and Action proposal selector
-- Source traceability expansion
-- Review comments
-- Approve and Reject actions
-- Persistent proposal-type selection after reruns
-- Approved-proposal counters
-- Controlled publication confirmation
-- Publication result message
-- Agent Run History
-- Canonical Gap Board and Recommended Actions
-- Public-safe disclaimer
+1. Resolves `app/streamlit_app.py` from the repository
+2. Uploads it to a dedicated production stage
+3. Recreates the configured Streamlit app
+4. Leaves the legacy rollback stage unchanged
+5. Prints the object description for verification
 
 ## Governance Boundary
 
-The app does not write model output directly to canonical dashboard tables.
+The app never treats model output as a governed record.
 
 ```text
-Cortex AI result
-→ REVIEW_REQUIRED proposal
-→ Human APPROVED or REJECTED
-→ Controlled publish
-→ Canonical record
+Cortex AI output
+→ REVIEW_REQUIRED
+→ APPROVED or REJECTED by a person
+→ explicit publication
+→ governed record
 ```
 
-Rejected and unreviewed proposals remain outside canonical dashboard results.
-
-## Design
-
-- White background with navy and blue emphasis
-- Minimal decorative treatment
-- Clear state labels
-- Explicit review controls
-- Readable without prior explanation
+Rejected, unresolved, and merely approved proposals remain outside the published-record workspace until the publication procedure completes.

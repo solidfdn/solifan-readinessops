@@ -1,4 +1,4 @@
-# Architecture and control boundary
+# Architecture and Control Boundary
 
 ```text
 Assessment Run
@@ -12,7 +12,7 @@ Assessment Run
               │
               ▼
      Draft Proposals
-     (Gap / Risk / Action)
+     GAP / RISK / ACTION
      STATUS = REVIEW_REQUIRED
               │
               ▼
@@ -22,22 +22,41 @@ Assessment Run
               ▼
      Controlled Publication
               │
-       ┌──────┴────────┐
-       ▼               ▼
-READINESS_GAPS   RECOMMENDED_ACTIONS
-       │               │
-       └──────┬────────┘
-              ▼
-   Dashboard / BI / Agent / Report
+       ┌──────┴─────────────┐
+       ▼                    ▼
+READINESS_GAPS      RECOMMENDED_ACTIONS
+Gap + normalized Risk         Action
+       │                    │
+       └─────────┬──────────┘
+                 ▼
+     Dashboard / BI / Agent / Report
 
-Every decision:
+Every decision and publication:
 GOVERNANCE_APPROVAL_HISTORY
 ```
 
-## Control boundary
+## Control Boundary
 
-`Requirement / Rule Context → AI Proposed → Human Approved → Published`
+```text
+Requirement / Rule Context
+→ AI Proposed
+→ Human Approved
+→ Explicitly Published
+```
+
+## Risk Normalization
+
+The demonstration has no dedicated canonical Risk table. Approved Risks publish to `READINESS_GAPS` with a `[RISK]` prefix and retain their Risk identity through the source proposal.
 
 ## Traceability
 
-`Question → Answer → Evidence → Rule Context → Agent Run → Proposal → Human Decision → Published Record`
+```text
+Question
+→ Answer
+→ Evidence
+→ Rule Context
+→ Agent Run
+→ Proposal
+→ Human Decision
+→ Published Record
+```

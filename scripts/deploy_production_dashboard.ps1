@@ -1,17 +1,28 @@
-﻿param(
-    [string]$RepoPath = "C:\Users\okada\Documents\READINESSOPS",
-    [string]$ConnectionName = "JD45494"
+param(
+    [string]$RepoPath = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path,
+    [string]$ConnectionName = "JD45494",
+    [string]$Database = "READINESSOPS_VALIDATION",
+    [string]$Schema = "APP",
+    [string]$Warehouse = "READINESSOPS_WH",
+    [string]$Role = "ACCOUNTADMIN",
+    [string]$AppName = "READINESSOPS_DASHBOARD",
+    [string]$StageName = "READINESSOPS_PRODUCTION_STAGE"
 )
 
 $ErrorActionPreference = "Stop"
 
-if (-not (Test-Path $RepoPath)) {
-    throw "Repository not found: $RepoPath"
+if (-not (Test-Path (Join-Path $RepoPath ".git"))) {
+    throw "Git repository not found: $RepoPath"
 }
 
 $SourceApp = Join-Path $RepoPath "app\streamlit_app.py"
 if (-not (Test-Path $SourceApp)) {
     throw "Canonical Streamlit source not found: $SourceApp"
+}
+
+$status = & git -C $RepoPath status --porcelain
+if ($status) {
+    throw "Working tree is not clean. Deploy only a committed Git state."
 }
 
 $AuditDir = Join-Path $RepoPath "_audit"
@@ -22,35 +33,28 @@ $SqlFile = Join-Path $AuditDir "deploy_production_dashboard_$stamp.sql"
 $putPath = $SourceApp.Replace("\", "/")
 
 $sql = @"
-USE ROLE ACCOUNTADMIN;
-USE DATABASE READINESSOPS_VALIDATION;
-USE SCHEMA APP;
-USE WAREHOUSE READINESSOPS_WH;
+USE ROLE $Role;
+USE DATABASE $Database;
+USE SCHEMA $Schema;
+USE WAREHOUSE $Warehouse;
 
--- Keep the old STREAMLIT_STAGE intact for immediate rollback.
-CREATE STAGE IF NOT EXISTS
-    READINESSOPS_VALIDATION.APP.READINESSOPS_PRODUCTION_STAGE;
+CREATE STAGE IF NOT EXISTS $Database.$Schema.$StageName;
 
-REMOVE
-    @READINESSOPS_VALIDATION.APP.READINESSOPS_PRODUCTION_STAGE
-    PATTERN='.*';
+REMOVE @$Database.$Schema.$StageName PATTERN='.*';
 
 PUT 'file://$putPath'
-    @READINESSOPS_VALIDATION.APP.READINESSOPS_PRODUCTION_STAGE
-    AUTO_COMPRESS = FALSE
-    OVERWRITE = TRUE;
+  @$Database.$Schema.$StageName
+  AUTO_COMPRESS = FALSE
+  OVERWRITE = TRUE;
 
-CREATE OR REPLACE STREAMLIT
-    READINESSOPS_VALIDATION.APP.READINESSOPS_DASHBOARD
-    ROOT_LOCATION =
-        '@READINESSOPS_VALIDATION.APP.READINESSOPS_PRODUCTION_STAGE'
-    MAIN_FILE = 'streamlit_app.py'
-    QUERY_WAREHOUSE = READINESSOPS_WH
-    TITLE = 'ReadinessOps Governance Review'
-    COMMENT =
-        'Production ReadinessOps governance review: Evidence, AI proposal, human decision, publication, and audit traceability.';
+CREATE OR REPLACE STREAMLIT $Database.$Schema.$AppName
+  ROOT_LOCATION = '@$Database.$Schema.$StageName'
+  MAIN_FILE = 'streamlit_app.py'
+  QUERY_WAREHOUSE = $Warehouse
+  TITLE = 'ReadinessOps Governance Review'
+  COMMENT = 'Evidence, AI proposal, human decision, controlled publication, and audit traceability.';
 
-DESC STREAMLIT READINESSOPS_VALIDATION.APP.READINESSOPS_DASHBOARD;
+DESC STREAMLIT $Database.$Schema.$AppName;
 "@
 
 [System.IO.File]::WriteAllText(
@@ -59,7 +63,7 @@ DESC STREAMLIT READINESSOPS_VALIDATION.APP.READINESSOPS_DASHBOARD;
     [System.Text.Encoding]::ASCII
 )
 
-Write-Host "Deploying canonical Git source to READINESSOPS_DASHBOARD..." -ForegroundColor Cyan
+Write-Host "Deploying committed Streamlit source..." -ForegroundColor Cyan
 & snow sql -c $ConnectionName -f $SqlFile
 
 if ($LASTEXITCODE -ne 0) {
@@ -68,5 +72,5 @@ if ($LASTEXITCODE -ne 0) {
 
 Write-Host ""
 Write-Host "Production dashboard updated." -ForegroundColor Green
-Write-Host "Open:" -ForegroundColor Cyan
-Write-Host "https://app.snowflake.com/KBXRZUR/jd45494/#/streamlit-apps/READINESSOPS_VALIDATION.APP.READINESSOPS_DASHBOARD" -ForegroundColor Yellow
+Write-Host "Object: $Database.$Schema.$AppName" -ForegroundColor Cyan
+Write-Host "Open the object from Snowsight > Streamlit." -ForegroundColor Yellow

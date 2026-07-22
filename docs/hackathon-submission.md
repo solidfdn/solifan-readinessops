@@ -6,30 +6,31 @@
 
 ## One-Sentence Description
 
-A Snowflake-native governance workspace that uses Cortex AI to generate evidence-grounded Gap, Risk, and Action drafts, requires human approval or rejection, and publishes only approved items to canonical governance records.
+A Snowflake-native governance workspace that uses Cortex AI to create evidence-grounded Gap, Risk, and Action drafts, requires an accountable human decision, and publishes only approved proposals as governed records with traceable history.
 
 ## Problem
 
-Organizations need more than a one-time AI readiness score. They need a repeatable operating process that connects:
+A readiness score does not operate governance. Organizations must continuously connect:
 
 ```text
-Question → Evidence → Gap → Risk → Action
+Question → Answer → Evidence → Gap → Risk → Action → Decision
 ```
 
-A direct-write AI agent is unsafe because a generated recommendation can become the system of record without human accountability.
+A direct-write AI agent is unsafe because generated text can become the system of record without accountable review, publication authority, or a preserved basis for the decision.
 
 ## Solution
 
-ReadinessOps separates AI analysis from governance authority:
+ReadinessOps separates analysis from authority:
 
-1. Read Assessment Run answers and evidence
-2. Generate Gap, Risk, and Action proposals with Snowflake Cortex AI
-3. Store every proposal as `REVIEW_REQUIRED`
-4. Show source evidence to the reviewer
-5. Approve or reject individual proposals with comments
-6. Publish only approved proposals
-7. Store decision and publication history
-8. Present only canonical records in the dashboard
+1. Read Assessment Run answers, evidence, and Requirement / Rule Context
+2. Accept an optional natural-language business priority
+3. Generate Gap, Risk, and Action drafts with Snowflake Cortex
+4. Store every proposal as `REVIEW_REQUIRED`
+5. Show the source context and AI rationale to the reviewer
+6. Approve or reject one proposal at a time
+7. Publish only approved proposals through a separate procedure
+8. Preserve decision and publication history
+9. Present governed records separately from unresolved drafts
 
 ## Application Screenshots
 
@@ -44,91 +45,114 @@ ReadinessOps separates AI analysis from governance authority:
 ### Human Decision and Publication Audit
 
 ![Human decision and publication audit](../assets/screenshots/app_ss_03.png)
+
 ## Evaluation Criteria Mapping
 
-### Technical Execution
+### Technical Implementation — 40%
 
 | Aspect | Implementation |
 |---|---|
-| Snowflake-native | Data, AI inference, procedures, Streamlit, and history remain in Snowflake |
-| Cortex AI integration | `SNOWFLAKE.CORTEX.COMPLETE('mistral-large2', ...)` |
-| Structured output | JSON containing `gaps`, `risks`, and `actions` |
-| Safe parsing | Fence stripping and `TRY_PARSE_JSON` |
-| Type normalization | Priority normalization and safe numeric casts |
-| Governance state | `REVIEW_REQUIRED`, `APPROVED`, `REJECTED`, `PUBLISHED` |
-| Human review | `SP_REVIEW_AGENT_PROPOSAL` with reviewer comment |
-| Controlled publication | `SP_PUBLISH_AGENT_RUN` publishes approved proposals only |
-| Traceability | Proposal source rows link back to Question, Answer, Evidence, and Rule |
-| Auditability | Review and publication events in `GOVERNANCE_APPROVAL_HISTORY` |
-| Idempotency | Duplicate canonical publication is prevented |
-| Presentation safety | Dashboard excludes legacy `AR_%` direct-write output |
+| Snowflake-native workflow | Data, inference, procedures, Streamlit, and history remain in Snowflake |
+| Cortex integration | `SNOWFLAKE.CORTEX.COMPLETE('mistral-large2', ...)` |
+| Structured output | JSON arrays for `gaps`, `risks`, and `actions` |
+| Defensive parsing | Fence stripping, `TRY_PARSE_JSON`, safe casts, and priority normalization |
+| Proposal isolation | Every AI result begins as `REVIEW_REQUIRED` |
+| Human decision | `SP_REVIEW_AGENT_PROPOSAL` with actor, time, state, and comment |
+| Controlled publication | `SP_PUBLISH_AGENT_RUN` publishes only approved proposals |
+| Traceability | Proposal source rows connect to Question, Answer, Evidence, Rule Context, and Agent Run |
+| Idempotency | Duplicate governed writes and duplicate publication history are prevented |
+| Runtime compatibility | Tested Streamlit fallbacks, native boolean parameters, and one-based tables |
+| Read-only final validation | Procedure, traceability, state, audit, duplicate, and production-object checks |
 
-### Solution Completeness
+### Real-World Relevance — 30%
+
+- **Users:** CCoE teams, AI governance leads, risk managers, program owners, internal audit, and executive sponsors
+- **Decision boundary:** AI proposes; accountable people decide
+- **Operational value:** Assessment history supports repeated governance reviews rather than a one-time report
+- **Evidence value:** Every proposal is inspectable before approval
+- **Integration value:** Published Snowflake records can feed BI, Cortex, reporting, and downstream agents
+- **Governance value:** Approval and publication are distinct authorities
+- **Adaptability:** The lifecycle can be repeated across domains and Assessment Runs
+
+### Completeness — 30%
 
 | Component | Status |
 |---|---|
-| Assessment data model | Complete |
-| Governance agent run model | Complete |
-| Gap/Risk/Action proposal model | Complete |
+| Assessment context | Complete for the demonstration model |
+| Natural-language priority input | Complete |
+| Governance Agent Run | Complete |
+| Gap, Risk, and Action drafts | Complete |
 | Proposal-source traceability | Complete |
 | Human approval and rejection | Complete |
 | Controlled publication | Complete |
-| Approval and publication history | Complete |
-| Canonical dashboard view | Complete |
-| Streamlit governance workspace | Complete |
-| Validation SQL | Complete |
-| Documentation and demo guide | Complete |
+| Decision and publication history | Complete |
+| Governed-record workspace | Complete |
+| Issue-based review UX | Complete |
+| Production deployment and rollback scripts | Complete |
+| Read-only final validation | Complete |
+| Documentation and four-minute demo | Complete |
 
-### Real-World Relevance
+## Technical Control Boundary
 
-- **Users:** CCoE teams, AI governance leads, risk managers, program owners, and executive sponsors
-- **Decision boundary:** AI proposes; accountable people decide
-- **Operational model:** Assessment history supports repeated maturity reviews
-- **Evidence model:** Every proposal is inspectable before approval
-- **Integration value:** Published Snowflake records can feed BI, Cortex, and AI-agent workflows
-- **Scalability:** The same governance lifecycle can be applied across domains and repeated Assessment Runs
+```text
+Requirement / Rule Context
+        ↓
+AI Proposed
+        ↓
+Human Approved
+        ↓
+Explicitly Published
+```
 
-## Built With CoCo CLI
-
-The implementation was developed and validated through Snowflake Cortex Code CLI workflows:
-
-1. Live schema inspection
-2. SQL procedure development
-3. Cortex output testing
-4. Failure diagnosis
-5. Read-only validation
-6. Streamlit deployment
-7. Governance lifecycle verification
-8. Repository and documentation updates
+The AI cannot approve its own proposal and cannot invoke publication through the UI without a human-approved state.
 
 ## Verified Results
 
-The demonstrated full review generated:
+A completed review generated:
 
-| Metric | Value |
+| Proposal type | Count |
 |---|---:|
-| Gaps generated | 5 |
-| Risks generated | 2 |
-| Actions generated | 5 |
-| Total draft proposals | 12 |
+| Gap | 5 |
+| Risk | 2 |
+| Action | 5 |
+| Total drafts | 12 |
 
-The human-governance test verified:
+Verified lifecycle behavior:
 
-| Decision | Result |
+| Test | Result |
 |---|---|
-| Gap | Approved and published |
-| Risk | Rejected and not published |
-| Action | Approved and published |
-| Published Gap records | 1 |
-| Published Action records | 1 |
-| Gap history records | 2 |
-| Action history records | 2 |
-| Risk history records | 1 |
+| Gap approval and publication | Passed |
+| Risk rejection without publication | Passed |
+| Action approval and publication | Passed |
+| Separate approval and publication events | Passed |
+| Duplicate publication prevention | Passed |
+| Source Proposal and Agent Run traceability | Passed |
+| One-based visible list numbering | Passed |
+| Empty publication-state navigation | Passed |
+| Production dashboard deployment | Passed |
+| Git `main` synchronization | Passed |
+
+## Canonical Risk Constraint
+
+Risk is reviewed as a first-class proposal. Because the demonstration schema has no dedicated Risk table, an approved Risk is published to `READINESS_GAPS` with a `[RISK]` prefix and remains identifiable through its source proposal. This limitation is explicit in the Architecture and README.
+
+## Built With CoCo CLI
+
+The implementation workflow included:
+
+1. Live Snowflake schema inspection
+2. SQL procedure development
+3. Cortex output testing
+4. Runtime failure diagnosis
+5. Read-only validation
+6. Streamlit deployment
+7. End-to-end governance testing
+8. Git and documentation synchronization
 
 ## Why It Matters
 
-ReadinessOps demonstrates that an AI governance product should not stop at diagnosis and should not allow AI output to silently become truth. It operationalizes the accountable path from evidence to action while keeping the system of record under human control.
+ReadinessOps demonstrates that AI governance should not stop at diagnosis and should not allow generated output to silently become truth. It operationalizes the accountable path from evidence to action while keeping publication authority with people.
 
 ## Relationship to SOLIFAN CCoE Readiness Studio
 
-ReadinessOps is the governed agent workflow for the broader SOLIFAN CCoE Readiness Studio concept: an Enterprise AI Governance operating platform that tracks readiness over time and connects assessment evidence to gaps, risks, decisions, and actions.
+ReadinessOps is the governed-agent workflow for the broader SOLIFAN CCoE Readiness Studio concept: an Enterprise AI Governance operating platform that tracks readiness over time and connects evidence, gaps, risks, decisions, and actions.

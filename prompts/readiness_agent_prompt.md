@@ -1,30 +1,40 @@
 # LLM Prompt Template — Governance Review
 
-## Overview
+## Purpose
 
-This prompt is constructed by `SP_RUN_FULL_GOVERNANCE_REVIEW` and sent to:
+`SP_RUN_FULL_GOVERNANCE_REVIEW` constructs this prompt and sends it to:
 
 ```sql
 SNOWFLAKE.CORTEX.COMPLETE('mistral-large2', <prompt>)
 ```
 
-Its purpose is to generate evidence-grounded **Gap**, **Risk**, and **Action** proposals. The output is stored as review drafts and does not become a canonical governance record until human approval and controlled publication.
+The model generates evidence-grounded Gap, Risk, and Action proposals. Its output is stored as `REVIEW_REQUIRED` and cannot become a governed record without human approval and explicit publication.
 
-## Standard Instruction
-
-```text
-Review the selected Assessment Run. Evaluate the sufficiency of available evidence, identify readiness gaps, assess the related governance and operational risks, and propose prioritized actions. Every proposal must be supported by the supplied Question, Answer, Evidence, and Rule context. Do not invent evidence.
-```
-
-## Optional Additional Instruction
-
-A user can add a business priority or time horizon, for example:
+## Fixed Standard Instruction
 
 ```text
-Prioritize governance issues that could block executive approval within the next 90 days. Do not propose any gap, risk, or action that is not supported by the supplied assessment evidence.
+Review the selected Assessment Run.
+Evaluate the sufficiency of available evidence, identify readiness gaps, assess the related governance and operational risks, and propose prioritized actions.
+Every proposal must be supported by the supplied Question, Answer, Evidence, and Rule context.
+Do not invent evidence.
 ```
 
-The additional instruction supplements the standard instruction. It does not remove the evidence-grounding requirement.
+## Optional Additional Business Instruction
+
+A reviewer can add a priority or time horizon:
+
+```text
+Prioritize governance issues that could block executive approval within the next 90 days.
+Do not propose any gap, risk, or action that is not supported by the supplied assessment evidence.
+```
+
+The additional instruction:
+
+- Supplements the fixed instruction
+- Cannot remove the evidence-grounding requirement
+- Cannot approve a proposal
+- Cannot authorize publication
+- Is stored with the Agent Run for traceability
 
 ## Input Format
 
@@ -45,7 +55,7 @@ Evidence Status: PARTIAL
 
 ## Source Fields
 
-| Prompt Field | Source |
+| Prompt field | Source |
 |---|---|
 | Question ID | `READINESS_QUESTIONS.QUESTION_ID` |
 | Domain | `READINESS_DOMAINS.DOMAIN_NAME` |
@@ -59,7 +69,7 @@ Evidence Status: PARTIAL
 
 ## Required Output
 
-Return one JSON object with three arrays:
+Return one JSON object:
 
 ```json
 {
@@ -70,7 +80,7 @@ Return one JSON object with three arrays:
       "priority": 95,
       "title": "Short gap title",
       "description": "Why this is a readiness gap.",
-      "rationale": "How the supplied assessment context supports the proposal."
+      "rationale": "How the supplied context supports the proposal."
     }
   ],
   "risks": [
@@ -80,7 +90,7 @@ Return one JSON object with three arrays:
       "priority": 90,
       "title": "Short risk title",
       "description": "The governance or operational exposure.",
-      "rationale": "How the supplied assessment context supports the proposal."
+      "rationale": "How the supplied context supports the proposal."
     }
   ],
   "actions": [
@@ -105,7 +115,7 @@ Return one JSON object with three arrays:
 - Do not invent evidence
 - Every proposal must reference a supplied `question_id`
 - `severity` must be `HIGH`, `MEDIUM`, or `LOW`
-- `priority` should be one of `60`, `70`, `80`, `90`, or `95`
+- `priority` should be `60`, `70`, `80`, `90`, or `95`
 - `recommended_owner` must be one of:
   - `Risk Manager`
   - `Data Governance Lead`
@@ -114,15 +124,15 @@ Return one JSON object with three arrays:
   - `Security Lead`
 - `due_in_days` must be `14`, `30`, `60`, or `90`
 
-## Post-Processing
+## Post-Processing and Governance
 
 The stored procedure:
 
-1. Strips optional markdown fences
+1. Removes optional markdown fences
 2. Parses with `TRY_PARSE_JSON`
-3. Fails the agent run safely if JSON is invalid
-4. Normalizes 1–5 priority output to 60–95
-5. Bounds other priority values safely
-6. Stores proposals as `REVIEW_REQUIRED`
-7. Creates proposal-source traceability
-8. Requires human review before publication
+3. Fails the Agent Run safely if the JSON is invalid
+4. Normalizes priority values
+5. Stores proposals as `REVIEW_REQUIRED`
+6. Creates proposal-source traceability
+7. Requires human review
+8. Requires explicit publication for governed records

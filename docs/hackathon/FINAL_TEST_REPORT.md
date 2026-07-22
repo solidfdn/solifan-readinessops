@@ -1,49 +1,75 @@
-# Final test report
+# Final Test Report
 
 Date: 2026-07-22
 
-## Static validation
+## Static Validation
 
 - Python syntax: PASS
-- Direct `st.dataframe` usage: common compatibility helper only
-- Unsupported `hide_index` argument: not used
+- Unsupported `hide_index`: not used
+- Streamlit boolean arguments: native Python `bool`
+- Rerun compatibility helper: present
 - Visible table numbering: one-based (`No.`)
-- Existing production Streamlit replacement command: not included
+- Back-to-review navigation: present
+- Production source: Git-tracked `app/streamlit_app.py`
 
-## Observed end-to-end test
+## End-to-End Governance Tests
 
-### Approve
+### Generation
 
-- Needs human decision: `8 → 7`
-- Approved, not published: `0 → 1`
-- Published governance records: unchanged at `5`
-- Approval history written
+A completed review produced:
 
-### Publish
+| Type | Count |
+|---|---:|
+| Gap | 5 |
+| Risk | 2 |
+| Action | 5 |
+| Total | 12 |
 
-- Approved, not published: `1 → 0`
-- Published governance records: `5 → 6`
-- Published actions: `1 → 2`
-- Canonical Action created
+### Approval
+
+Observed:
+
+- Needs human decision decreased
+- Approved, not published increased
+- Published governance records did not change
+- Approval history was written
+
+### Publication
+
+Observed:
+
+- Approved, not published returned to zero for the selected proposal
+- Published governance records increased
+- Governed Action record was created
+- Publication history was written
 
 ### Audit
 
-Latest events confirmed:
+Confirmed separate events:
 
-1. `PUBLISH / ACTION / Develop High-Risk AI Review Process`
-2. `APPROVE / ACTION / Develop High-Risk AI Review Process`
+1. `PUBLISH / ACTION`
+2. `APPROVE / ACTION`
 
-### UI
+### Additional Lifecycle Checks
 
-- Summary: PASS
-- Review by issue: PASS
-- Approved & publish: PASS
-- Published record list + detail: PASS
-- Audit list + detail: PASS
-- One-based row numbering: PASS
+- Gap approval and publication: PASS
+- Risk rejection without publication: PASS
+- Action approval and publication: PASS
+- Duplicate publication prevention: PASS
+- Source Proposal and Agent Run traceability: PASS
+- Published record list and detail: PASS
+- Audit list and detail: PASS
+- One-based numbering: PASS
+- Empty publication-state Back button: PASS
+- Production dashboard display: PASS
+- Git `main` synchronization: PASS
 
-## Remaining operational note
+## Production Object
 
-For a clean live demo, create a new AI Review at the beginning.
-This makes the latest Run the active review without deleting historical evidence,
-published records, or audit history.
+```text
+READINESSOPS_VALIDATION.APP.READINESSOPS_DASHBOARD
+```
+
+## Operational Note
+
+Live counts change after each review, decision, and publication. The stable acceptance criteria are the state transitions, traceability, duplicate prevention, and separation between AI proposal and human publication authority.
