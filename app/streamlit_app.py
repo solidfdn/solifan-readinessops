@@ -5,6 +5,7 @@ from datetime import datetime
 import pandas as pd
 import streamlit as st
 from snowflake.snowpark.context import get_active_session
+from value_control_plane import render_value_control_plane
 
 
 # ============================================================
@@ -651,7 +652,7 @@ if last_error_message:
 
 workspace = st.radio(
     "Workspace",
-    options=["Review queue", "Published records", "Audit trail", "Review setup"],
+    options=["Review queue", "Value Control Plane", "Published records", "Audit trail", "Review setup"],
     horizontal=True,
     key="workspace_navigation",
 )
@@ -1414,6 +1415,14 @@ elif workspace == "Audit trail":
                     f"Proposal ID: {text(row['PROPOSAL_ID'])} · "
                     f"History ID: {text(row['APPROVAL_HISTORY_ID'])}"
                 )
+
+
+# ============================================================
+# Value Control Plane
+# ============================================================
+elif workspace == "Value Control Plane":
+    current_actor = session.sql("SELECT CURRENT_USER()").collect()[0][0]
+    render_value_control_plane(session, selected_run_id, current_actor)
 
 
 # ============================================================

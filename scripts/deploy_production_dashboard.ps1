@@ -16,8 +16,12 @@ if (-not (Test-Path (Join-Path $RepoPath ".git"))) {
 }
 
 $SourceApp = Join-Path $RepoPath "app\streamlit_app.py"
+$SourceModule = Join-Path $RepoPath "app\value_control_plane.py"
 if (-not (Test-Path $SourceApp)) {
     throw "Canonical Streamlit source not found: $SourceApp"
+}
+if (-not (Test-Path $SourceModule)) {
+    throw "Value Control Plane module not found: $SourceModule"
 }
 
 $status = & git -C $RepoPath status --porcelain
@@ -31,6 +35,7 @@ New-Item $AuditDir -ItemType Directory -Force | Out-Null
 $stamp = Get-Date -Format "yyyyMMdd_HHmmss"
 $SqlFile = Join-Path $AuditDir "deploy_production_dashboard_$stamp.sql"
 $putPath = $SourceApp.Replace("\", "/")
+$modulePutPath = $SourceModule.Replace("\", "/")
 
 $sql = @"
 USE ROLE $Role;
@@ -40,7 +45,12 @@ USE WAREHOUSE $Warehouse;
 
 CREATE STAGE IF NOT EXISTS $Database.$Schema.$StageName;
 
-REMOVE @$Database.$Schema.$StageName PATTERN='.*';
+-- Upload the dependency first so the currently deployed app remains runnable
+-- if either PUT fails. Existing stage files are overwritten by exact name.
+PUT 'file://$modulePutPath'
+  @$Database.$Schema.$StageName
+  AUTO_COMPRESS = FALSE
+  OVERWRITE = TRUE;
 
 PUT 'file://$putPath'
   @$Database.$Schema.$StageName
