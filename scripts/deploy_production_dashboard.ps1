@@ -17,11 +17,15 @@ if (-not (Test-Path (Join-Path $RepoPath ".git"))) {
 
 $SourceApp = Join-Path $RepoPath "app\streamlit_app.py"
 $SourceModule = Join-Path $RepoPath "app\value_control_plane.py"
+$SourceEnv = Join-Path $RepoPath "app\environment.yml"
 if (-not (Test-Path $SourceApp)) {
     throw "Canonical Streamlit source not found: $SourceApp"
 }
 if (-not (Test-Path $SourceModule)) {
     throw "Value Control Plane module not found: $SourceModule"
+}
+if (-not (Test-Path $SourceEnv)) {
+    throw "Environment file not found: $SourceEnv"
 }
 
 $status = & git -C $RepoPath status --porcelain
@@ -36,6 +40,7 @@ $stamp = Get-Date -Format "yyyyMMdd_HHmmss"
 $SqlFile = Join-Path $AuditDir "deploy_production_dashboard_$stamp.sql"
 $putPath = $SourceApp.Replace("\", "/")
 $modulePutPath = $SourceModule.Replace("\", "/")
+$envPutPath = $SourceEnv.Replace("\", "/")
 
 $sql = @"
 USE ROLE $Role;
@@ -44,6 +49,11 @@ USE SCHEMA $Schema;
 USE WAREHOUSE $Warehouse;
 
 CREATE STAGE IF NOT EXISTS $Database.$Schema.$StageName;
+
+PUT 'file://$envPutPath'
+  @$Database.$Schema.$StageName
+  AUTO_COMPRESS = FALSE
+  OVERWRITE = TRUE;
 
 -- Upload the dependency first so the currently deployed app remains runnable
 -- if either PUT fails. Existing stage files are overwritten by exact name.
@@ -84,3 +94,4 @@ Write-Host ""
 Write-Host "Production dashboard updated." -ForegroundColor Green
 Write-Host "Object: $Database.$Schema.$AppName" -ForegroundColor Cyan
 Write-Host "Open the object from Snowsight > Streamlit." -ForegroundColor Yellow
+
