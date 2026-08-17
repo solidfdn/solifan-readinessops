@@ -439,7 +439,8 @@ BEGIN
     INSERT INTO GOVERNANCE_AGENT_PROPOSAL (
         PROPOSAL_ID, AGENT_RUN_ID, ASSESSMENT_RUN_ID, PROPOSAL_TYPE,
         TITLE, DESCRIPTION, SEVERITY, PRIORITY, RATIONALE, STATUS, PROPOSAL_PAYLOAD
-    ) VALUES (
+    )
+    SELECT
         :v_agent_run_id || '_GOV',
         :v_agent_run_id,
         :P_ASSESSMENT_RUN_ID,
@@ -450,14 +451,14 @@ BEGIN
         80,
         'Generated from assessment evidence and governance evaluation.',
         'REVIEW_REQUIRED',
-        :v_parsed:governance_summary
-    );
+        :v_parsed:governance_summary;
 
     -- DECISION_VALUE
     INSERT INTO GOVERNANCE_AGENT_PROPOSAL (
         PROPOSAL_ID, AGENT_RUN_ID, ASSESSMENT_RUN_ID, PROPOSAL_TYPE,
         TITLE, DESCRIPTION, SEVERITY, PRIORITY, RATIONALE, STATUS, PROPOSAL_PAYLOAD
-    ) VALUES (
+    )
+    SELECT
         :v_agent_run_id || '_VAL',
         :v_agent_run_id,
         :P_ASSESSMENT_RUN_ID,
@@ -468,14 +469,14 @@ BEGIN
         75,
         'Generated from business outcome and evidence analysis.',
         'REVIEW_REQUIRED',
-        :v_parsed:value_realization
-    );
+        :v_parsed:value_realization;
 
     -- DECISION_MODEL_ROUTING
     INSERT INTO GOVERNANCE_AGENT_PROPOSAL (
         PROPOSAL_ID, AGENT_RUN_ID, ASSESSMENT_RUN_ID, PROPOSAL_TYPE,
         TITLE, DESCRIPTION, SEVERITY, PRIORITY, RATIONALE, STATUS, PROPOSAL_PAYLOAD
-    ) VALUES (
+    )
+    SELECT
         :v_agent_run_id || '_ROUTE',
         :v_agent_run_id,
         :P_ASSESSMENT_RUN_ID,
@@ -486,14 +487,14 @@ BEGIN
         70,
         'Generated from data readiness and complexity assessment.',
         'REVIEW_REQUIRED',
-        :v_parsed:model_routing
-    );
+        :v_parsed:model_routing;
 
     -- DECISION_PORTFOLIO
     INSERT INTO GOVERNANCE_AGENT_PROPOSAL (
         PROPOSAL_ID, AGENT_RUN_ID, ASSESSMENT_RUN_ID, PROPOSAL_TYPE,
         TITLE, DESCRIPTION, SEVERITY, PRIORITY, RATIONALE, STATUS, PROPOSAL_PAYLOAD
-    ) VALUES (
+    )
+    SELECT
         :v_agent_run_id || '_PORT',
         :v_agent_run_id,
         :P_ASSESSMENT_RUN_ID,
@@ -504,8 +505,7 @@ BEGIN
         :v_port_priority,
         :v_parsed:portfolio_recommendation:rationale::VARCHAR,
         'REVIEW_REQUIRED',
-        :v_parsed:portfolio_recommendation
-    );
+        :v_parsed:portfolio_recommendation;
 
     -- Source traceability: one immutable row per cited evidence item and section.
     INSERT INTO GOVERNANCE_AGENT_PROPOSAL_SOURCE (
@@ -552,7 +552,7 @@ EXCEPTION
         ROLLBACK;
         UPDATE GOVERNANCE_AGENT_RUN
         SET STATUS = 'FAILED', COMPLETED_AT = CURRENT_TIMESTAMP(),
-            ERROR_MESSAGE = LEFT(SQLERRM, 500)
+            ERROR_MESSAGE = LEFT(:SQLERRM, 500)
         WHERE AGENT_RUN_ID = :v_agent_run_id;
         RETURN '{"status":"FAILED","agent_run_id":"' || :v_agent_run_id || '","error":"' || LEFT(SQLERRM, 200) || '"}';
 END;
