@@ -5,7 +5,11 @@
 `SP_GENERATE_DECISION_PACK` constructs this prompt and sends it to:
 
 ```sql
-SNOWFLAKE.CORTEX.COMPLETE('mistral-large2', <prompt>)
+AI_COMPLETE(
+  model => 'mistral-large2',
+  prompt => <prompt>,
+  response_format => <strict JSON schema>
+)
 ```
 
 The model generates a four-section Decision Pack. Output is stored as four
@@ -13,18 +17,20 @@ The model generates a four-section Decision Pack. Output is stored as four
 become a governed record without human review, optional inline editing,
 explicit approval, and separate publication.
 
-## Workflow Compatibility
+## Governed Execution Trace
 
-This procedure is designed to be decomposable into a multi-step CoCo
-orchestration in the next slice:
+The procedure executes one schema-constrained Cortex inference call and records
+five governed Run Steps around it:
 
-1. **Evidence scan** — gather and validate all evidence for the run
-2. **Governance evaluation** — produce `governance_summary`
-3. **Value/routing analysis** — produce `value_realization` and `model_routing`
-4. **Portfolio synthesis** — produce `portfolio_recommendation`
+1. **Input validation** — validate the Run, Initiative, evidence, and fingerprint
+2. **Context assembly** — assemble assessment, evidence, and prompt context
+3. **Cortex generation** — generate the strict four-section object
+4. **Output validation** — validate schema, enums, priority, and evidence IDs
+5. **Draft persistence** — atomically save proposals, source links, and run status
 
-The current implementation executes all steps in a single LLM call. The schema
-and proposal structure are forward-compatible with per-step agent runs.
+This trace makes the AI workflow inspectable without multiplying model calls or
+inference cost. The generated sections remain proposals until human review and
+explicit publication.
 
 ## Input Context
 

@@ -24,7 +24,7 @@ flowchart TD
     subgraph Intelligence
         PDF[AI_PARSE_DOCUMENT]
         DP[SP_GENERATE_DECISION_PACK]
-        CX[SNOWFLAKE.CORTEX.COMPLETE]
+        CX[AI_COMPLETE with strict JSON schema]
     end
 
     subgraph Governance
@@ -91,6 +91,7 @@ Generation never writes to `GOVERNED_DECISION_RECORD`. A proposal can become `PU
 | `EVIDENCE_ITEMS` | Extracted text, validation state, hash, source metadata, parser metadata, and stage path |
 | `READINESSOPS_EVIDENCE_STAGE` | Original TXT and PDF evidence retention |
 | `GOVERNANCE_AGENT_RUN` | Generation execution, model, instruction, status, timestamps, and summary |
+| `GOVERNANCE_AGENT_RUN_STEP` | Ordered execution status, timing, safe details, and failure point for a Decision Pack run |
 | `GOVERNANCE_AGENT_PROPOSAL` | Legacy or Decision Pack draft and lifecycle state |
 | `GOVERNANCE_AGENT_PROPOSAL_SOURCE` | Proposal-to-evidence source links |
 | `GOVERNANCE_APPROVAL_HISTORY` | Approval, rejection, and publication events |
@@ -125,14 +126,15 @@ Behavior:
 
 1. Validates the Assessment Run, linked initiative, and available evidence.
 2. Creates a Decision Pack Agent Run.
-3. Builds a prompt from assessment and uploaded evidence.
-4. Calls `SNOWFLAKE.CORTEX.COMPLETE('mistral-large2', ...)`.
-5. Removes optional markdown fences and parses JSON defensively.
-6. Requires exactly four objects: `governance_summary`, `value_realization`, `model_routing`, and `portfolio_recommendation`.
-7. Validates required fields, priority as an integer from 1 through 100, and non-empty source evidence IDs.
-8. Confirms every cited evidence ID belongs to the selected Assessment Run.
-9. Creates four `REVIEW_REQUIRED` proposals and per-section source links.
-10. Marks the run `COMPLETED` or records a controlled failure.
+3. Records five governed Run Steps around the execution.
+4. Builds a prompt from assessment and uploaded evidence.
+5. Calls `AI_COMPLETE()` with `mistral-large2` and a strict JSON response schema once.
+6. Removes optional markdown fences and parses JSON defensively.
+7. Requires exactly four objects: `governance_summary`, `value_realization`, `model_routing`, and `portfolio_recommendation`.
+8. Validates required fields, priority as an integer from 1 through 100, and non-empty source evidence IDs.
+9. Confirms every cited evidence ID belongs to the selected Assessment Run.
+10. Creates four `REVIEW_REQUIRED` proposals and per-section source links.
+11. Marks each step and the run `COMPLETED`, or records the controlled failure point.
 
 ### `SP_EDIT_AGENT_PROPOSAL`
 

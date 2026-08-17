@@ -28,11 +28,12 @@ ReadinessOps separates analysis from authority:
 2. Upload TXT or PDF evidence.
 3. Retain the original file in a Snowflake stage and parse PDF content with Cortex document intelligence.
 4. Generate exactly four Decision Pack drafts: Governance, Value, Model Routing, and Portfolio.
-5. Validate the output structure, priority, and source evidence IDs.
-6. Let a person inspect, edit, approve, or reject each section.
-7. Publish only approved sections after explicit confirmation.
-8. Preserve Governed Decision Records and approval/publication history.
-9. Present initiative-level recommendations in a portfolio view.
+5. Persist the governed execution steps, status, timing, and failure point.
+6. Validate the output structure, priority, and source evidence IDs.
+7. Let a person inspect, edit, approve, or reject each section.
+8. Publish only approved sections after explicit confirmation.
+9. Preserve Governed Decision Records and approval/publication history.
+10. Present initiative-level recommendations in a portfolio view.
 
 The existing Gap, Risk, and Action governance workflow remains available and unchanged in behavior.
 
@@ -57,11 +58,12 @@ The existing Gap, Risk, and Action governance workflow remains available and unc
 | Aspect | Implementation |
 |---|---|
 | Snowflake-native workflow | Data, stages, parsing, inference, procedures, Streamlit, views, and history remain in Snowflake |
-| Cortex generation | `SNOWFLAKE.CORTEX.COMPLETE('mistral-large2', ...)` |
+| Cortex generation | `AI_COMPLETE()` with `mistral-large2` and a strict JSON response schema |
 | PDF intelligence | `AI_PARSE_DOCUMENT` extracts PDF evidence text |
 | Original-file retention | TXT and PDF files stored in `READINESSOPS_EVIDENCE_STAGE` |
 | Strict structured output | Exactly four required Decision Pack objects with field and type validation |
 | Evidence grounding | Every section must cite non-empty evidence IDs belonging to the selected Run |
+| Agent observability | Five governed Run Steps record input validation, context assembly, Cortex generation, output validation, and draft persistence |
 | Proposal isolation | Every AI result begins as `REVIEW_REQUIRED` |
 | Human decision | Per-section edit, approval/rejection, actor, time, and comment |
 | Controlled publication | `SP_PUBLISH_AGENT_RUN` publishes only approved proposals |
@@ -89,6 +91,7 @@ The existing Gap, Risk, and Action governance workflow remains available and unc
 | Original-file stage retention | Complete |
 | Four-section Decision Pack | Complete |
 | Strict schema and evidence-ID validation | Complete |
+| Governed Agent execution trace | Complete |
 | Human edit, approval, and rejection | Complete |
 | Explicit controlled publication | Complete |
 | Governed Decision Records | Complete |
@@ -125,6 +128,7 @@ The isolated `RUN_FINALIST_E2E_001` test confirmed:
 | Four Governed Decision Records | Passed |
 | Portfolio view | Passed |
 | Evidence citation validation | Passed |
+| Five governed execution steps | Passed (5 recorded, 5 completed, 0 running, 0 failed) |
 | Duplicate publication prevention | Passed |
 | Proposal leakage into `RUN_001` | 0 |
 | Existing `RUN_001` retained | Passed |
