@@ -1,62 +1,76 @@
 # Architecture and Control Boundary
 
 ```text
-Assessment Run
-  └─ Question
-      ├─ Answer
-      ├─ Evidence
-      └─ Requirement / Rule Context
-              │
-              ▼
-     Cortex Governance Review
-              │
-              ▼
-     Draft Proposals
-     GAP / RISK / ACTION
-     STATUS = REVIEW_REQUIRED
-              │
-              ▼
-       Human Decision
-       APPROVE / REJECT
-              │
-              ▼
-     Controlled Publication
-              │
-       ┌──────┴─────────────┐
-       ▼                    ▼
-READINESS_GAPS      RECOMMENDED_ACTIONS
-Gap + normalized Risk         Action
-       │                    │
-       └─────────┬──────────┘
-                 ▼
-     Dashboard / BI / Agent / Report
+AI Initiative
+  └─ Assessment Run
+      └─ Evidence Items
+          ├─ Extracted TXT / PDF text
+          └─ Original file in Snowflake Stage
+                    │
+                    ▼
+          Cortex Decision Pack Generation
+                    │
+                    ▼
+       Four REVIEW_REQUIRED Proposals
+       GOVERNANCE / VALUE / ROUTING / PORTFOLIO
+                    │
+                    ▼
+             Human Decision
+             APPROVE / REJECT
+                    │
+                    ▼
+           Explicit Publication
+                    │
+                    ▼
+       GOVERNED_DECISION_RECORD
+                    │
+                    ▼
+              V_AI_PORTFOLIO
 
-Every decision and publication:
+Every approval and publication:
 GOVERNANCE_APPROVAL_HISTORY
 ```
 
 ## Control Boundary
 
 ```text
-Requirement / Rule Context
-→ AI Proposed
-→ Human Approved
+Evidence Supplied
+→ AI Drafted
+→ Human Reviewed
 → Explicitly Published
+→ Governed Record
 ```
 
-## Risk Normalization
+AI can parse and propose. It cannot approve or publish.
 
-The demonstration has no dedicated canonical Risk table. Approved Risks publish to `READINESS_GAPS` with a `[RISK]` prefix and retain their Risk identity through the source proposal.
+## Evidence Provenance
+
+TXT and PDF originals are retained in `READINESSOPS_EVIDENCE_STAGE`. `EVIDENCE_ITEMS` stores extracted text, hash, stage path, parser metadata, uploader, and timestamp. PDF extraction uses Cortex `AI_PARSE_DOCUMENT`.
+
+## Decision Pack Contract
+
+`SP_GENERATE_DECISION_PACK` accepts only a complete four-section object:
+
+- Governance
+- Value
+- Model Routing
+- Portfolio
+
+Each section requires a valid priority and non-empty evidence IDs belonging to the selected Assessment Run.
+
+## Compatibility
+
+The existing Gap, Risk, and Action workflow is preserved. Decision Pack proposals use `DECISION_*` types and publish to `GOVERNED_DECISION_RECORD`; legacy proposals keep their established canonical mappings.
 
 ## Traceability
 
 ```text
-Question
-→ Answer
-→ Evidence
-→ Rule Context
+Initiative
+→ Assessment Run
+→ Evidence + Original File
 → Agent Run
 → Proposal
 → Human Decision
 → Published Record
+→ Portfolio
 ```

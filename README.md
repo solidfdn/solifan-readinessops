@@ -1,62 +1,62 @@
 # SOLIFAN ReadinessOps
 
-**Human-governed AI readiness management on Snowflake**
+**Human-governed AI value control on Snowflake**
 
-ReadinessOps turns assessment answers and evidence into reviewable Gap, Risk, and Action proposals. Snowflake Cortex generates evidence-grounded drafts, but no AI output becomes a governed record until a human reviewer makes a decision and explicitly publishes the approved proposal.
+ReadinessOps turns assessment context and uploaded evidence into a four-section Decision Pack for accountable review. Snowflake Cortex analyzes the evidence, but no AI draft becomes a governed record until a person approves it and explicitly publishes it.
 
 ## Why It Matters
 
-A readiness score identifies a condition. Governance work must also preserve:
+Enterprise AI initiatives need more than a readiness score. Teams must preserve the path from evidence to an accountable investment decision:
 
 ```text
-Question → Answer → Evidence → Gap → Risk → Action → Human Decision → Published Record
+AI Initiative
+→ Assessment + Evidence
+→ Governance / Value / Model Routing / Portfolio drafts
+→ Human Decision
+→ Governed Decision Record
+→ Portfolio view + Audit history
 ```
 
-ReadinessOps demonstrates that operating lifecycle inside Snowflake.
+ReadinessOps demonstrates that operating lifecycle inside Snowflake while preserving the existing Gap, Risk, and Action governance workflow.
 
-## Governance Flow
+## Finalist Value Control Plane
 
-```text
-Assessment context
-        ↓
-Natural-language review priority
-        ↓
-Cortex AI proposal generation
-        ↓
-REVIEW_REQUIRED drafts
-        ↓
-Human approve or reject
-        ↓
-Controlled publication
-        ↓
-Governed records + decision history
-```
+The finalist build adds five connected workspaces:
+
+1. **Initiative** — create or link an AI Initiative to an Assessment Run
+2. **Evidence** — upload TXT or PDF evidence, retain the original file in a Snowflake stage, and store validated text and metadata
+3. **Decision Pack** — generate exactly four evidence-grounded AI drafts: Governance, Value, Model Routing, and Portfolio
+4. **Published** — inspect only human-approved, explicitly published Governed Decision Records
+5. **Portfolio** — compare initiatives by stage, governance status, value assessment, recommendation, and priority
+
+Human decisions and publication events remain visible in the existing **Audit trail** workspace.
 
 ## Control Boundary
 
 | Role | Authority |
 |---|---|
-| AI | Analyzes supplied Question, Answer, Evidence, and Rule Context; proposes Gap, Risk, and Action drafts |
-| Human reviewer | Approves or rejects individual proposals and records the decision rationale |
+| Cortex AI | Parses supplied evidence and proposes Decision Pack sections or legacy Gap, Risk, and Action drafts |
+| Human reviewer | Approves or rejects each proposal and records the decision rationale |
 | Publication procedure | Writes only approved proposals to governed tables and records publication history |
-| Dashboard | Shows governed records separately from unresolved drafts |
+| Dashboard | Separates drafts, approved items, published records, portfolio views, and audit history |
 
-Natural-language input is intentionally limited to two accountable points:
+```text
+AI Draft → REVIEW_REQUIRED → Human APPROVE / REJECT → Explicit PUBLISH → Governed Record
+```
 
-1. **Review priority:** an optional business instruction before proposal generation
-2. **Decision rationale:** a reviewer comment when approving or rejecting a proposal
+The model cannot approve its own output and cannot publish directly from generation.
 
 ## Product Walkthrough
 
 ### 1. Governance Review Summary
 
-The workspace shows the latest completed review, proposal counts, evidence requiring attention, and the human-review queue.
+The workspace shows the active Assessment Run, governance metrics, latest completed review, and available review workspaces.
 
 ![Governance review summary](assets/screenshots/app_ss_01.png)
 
-### 2. Natural-Language AI Review Setup
+### 2. Evidence-Grounded AI Review
 
-A reviewer can add a business priority or time horizon. The additional instruction supplements the fixed evidence-grounding requirement; it cannot authorize publication.
+Reviewers can supply assessment evidence and an optional business instruction. The instruction may focus the analysis but cannot relax evidence grounding or publication controls.
 
 ![Natural-language AI review setup](assets/screenshots/app_ss_02.png)
 
@@ -69,38 +69,35 @@ Approval, rejection, and publication are separate state transitions with actor, 
 ## Architecture
 
 ```mermaid
-flowchart LR
-    A[Assessment Run] --> B[Question]
-    B --> C[Answer]
-    B --> D[Evidence]
-    B --> E[Requirement / Rule Context]
-
-    C --> F[SP_RUN_FULL_GOVERNANCE_REVIEW]
-    D --> F
+flowchart TD
+    A[AI Initiative] --> B[Assessment Run]
+    B --> C[TXT / PDF Evidence]
+    C --> D[Snowflake Stage]
+    C --> E[AI_PARSE_DOCUMENT for PDF]
+    B --> F[SP_GENERATE_DECISION_PACK]
     E --> F
     F --> G[Snowflake Cortex AI]
-
-    G --> H[GOVERNANCE_AGENT_PROPOSAL]
-    F --> I[GOVERNANCE_AGENT_PROPOSAL_SOURCE]
-    F --> J[GOVERNANCE_AGENT_RUN]
-
-    H --> K{Human Review}
-    K -->|Approve| L[APPROVED]
-    K -->|Reject| M[REJECTED]
-
-    L --> N[SP_PUBLISH_AGENT_RUN]
-    N --> O[READINESS_GAPS]
-    N --> P[RECOMMENDED_ACTIONS]
-    N --> Q[GOVERNANCE_APPROVAL_HISTORY]
-
-    O --> R[V_READINESSOPS_ACTION_BOARD]
-    P --> R
-    R --> S[Streamlit Governance Review]
+    G --> H[4 REVIEW_REQUIRED Proposals]
+    H --> I{Human Review}
+    I -->|Approve| J[APPROVED]
+    I -->|Reject| K[REJECTED]
+    J --> L[Explicit Publication]
+    L --> M[GOVERNED_DECISION_RECORD]
+    M --> N[V_AI_PORTFOLIO]
+    I --> O[GOVERNANCE_APPROVAL_HISTORY]
+    L --> O
 ```
 
-### Canonical Risk Handling
+The existing governed path remains intact:
 
-The demonstration schema has no dedicated canonical Risk table. Risk is a first-class proposal type during generation and human review. When an approved Risk is published, `SP_PUBLISH_AGENT_RUN` stores it in `READINESS_GAPS` with a `[RISK]` title prefix and preserves the source proposal type through traceability. This normalization is explicit and documented rather than hidden.
+```text
+Question + Answer + Evidence + Rule Context
+→ Gap / Risk / Action drafts
+→ Human review
+→ READINESS_GAPS / RECOMMENDED_ACTIONS
+```
+
+Approved Risks continue to publish to `READINESS_GAPS` with a `[RISK]` title prefix. The finalist migration extends `SP_PUBLISH_AGENT_RUN` additively; the existing Gap, Risk, and Action mappings are preserved.
 
 See [docs/architecture.md](docs/architecture.md) for the detailed design.
 
@@ -108,41 +105,45 @@ See [docs/architecture.md](docs/architecture.md) for the detailed design.
 
 | Object | Purpose |
 |---|---|
-| `GOVERNANCE_AGENT_RUN` | Review execution, model, instruction, status, timestamps, input fingerprint, and result summary |
-| `GOVERNANCE_AGENT_PROPOSAL` | Gap, Risk, and Action drafts with review and publication states |
-| `GOVERNANCE_AGENT_PROPOSAL_SOURCE` | Source traceability to Question, Answer, Evidence, and Rule Context |
-| `GOVERNANCE_APPROVAL_HISTORY` | Application-recorded approval, rejection, and publication events |
-| `SP_RUN_FULL_GOVERNANCE_REVIEW` | Generates evidence-grounded draft proposals |
-| `SP_REVIEW_AGENT_PROPOSAL` | Approves or rejects one proposal with an optional comment |
-| `SP_PUBLISH_AGENT_RUN` | Publishes approved proposals and prevents duplicate canonical writes |
-| `READINESS_GAPS` | Governed Gap records and normalized Risk records |
-| `RECOMMENDED_ACTIONS` | Governed Action records |
-| `V_READINESSOPS_ACTION_BOARD` | Canonical presentation layer excluding legacy direct-write output |
+| `AI_INITIATIVE` | Initiative name, owner, stage, and lifecycle status |
+| `ASSESSMENT_RUNS.INITIATIVE_ID` | Links an Assessment Run to an initiative |
+| `EVIDENCE_ITEMS` | Validated evidence text, hashes, source metadata, parser metadata, and stage path |
+| `READINESSOPS_EVIDENCE_STAGE` | Retains original TXT and PDF files |
+| `GOVERNANCE_AGENT_RUN` | Review execution, model, instruction, status, timestamps, fingerprint, and summary |
+| `GOVERNANCE_AGENT_PROPOSAL` | Legacy and Decision Pack drafts with review and publication states |
+| `GOVERNANCE_AGENT_PROPOSAL_SOURCE` | Proposal-to-evidence traceability |
+| `GOVERNANCE_APPROVAL_HISTORY` | Approval, rejection, and publication events |
+| `GOVERNED_DECISION_RECORD` | Published Governance, Value, Routing, and Portfolio decisions |
+| `SP_GENERATE_DECISION_PACK` | Generates and validates the four-section Decision Pack |
+| `SP_EDIT_AGENT_PROPOSAL` | Saves reviewer edits before a decision |
+| `SP_PUBLISH_AGENT_RUN` | Publishes approved legacy and Decision Pack proposals idempotently |
+| `V_AI_PORTFOLIO` | Portfolio presentation across AI initiatives |
 
 ## Snowflake Features Used
 
 | Feature | Usage |
 |---|---|
-| Snowflake Cortex AI | `SNOWFLAKE.CORTEX.COMPLETE()` for structured governance analysis |
-| SQL Scripting | Proposal generation, review state transitions, controlled writes, and exception handling |
-| Semi-structured data | `VARIANT`, `FLATTEN`, `TRY_PARSE_JSON`, and defensive type normalization |
-| Streamlit in Snowflake | Review setup, issue-based review, approval, rejection, publication, and audit inspection |
-| Views | Governed presentation layer |
-| Snowflake identity and timestamps | Reviewer and publication attribution |
-| Hashing | Input fingerprint for run traceability |
+| Snowflake Cortex AI | `SNOWFLAKE.CORTEX.COMPLETE()` for Decision Pack generation |
+| Cortex document intelligence | `AI_PARSE_DOCUMENT` for PDF evidence extraction |
+| Streamlit in Snowflake | Initiative, evidence, review, publication, portfolio, and audit workspaces |
+| SQL Scripting | Validation, state transitions, controlled writes, and exception handling |
+| Semi-structured data | `VARIANT`, `FLATTEN`, `TRY_PARSE_JSON`, and strict output-contract checks |
+| Internal stages | Original-file retention for uploaded evidence |
+| Snowflake identity and timestamps | Reviewer, uploader, and publisher attribution |
+| Hashing | Duplicate detection and input traceability |
 
-## Current Governed Deployment
+## Deployment
 
 ### Prerequisites
 
-- Snowflake account with Cortex AI enabled
-- Access to the configured model (`mistral-large2` in this demonstration)
+- Snowflake account with Cortex AI and `AI_PARSE_DOCUMENT` available
+- Access to the configured Cortex model (`mistral-large2` in this demonstration)
 - Snowflake CLI connection
 - Warehouse and privileges to create tables, views, procedures, stages, and Streamlit apps
 
-### Deploy the governed data model
+### Deploy the data model
 
-Run the current governed path in this order:
+Deploy the existing governed path first, then the finalist migration:
 
 ```text
 sql/01_setup.sql
@@ -153,75 +154,62 @@ sql/11_governance_review_procedure.sql
 sql/12_review_procedure.sql
 sql/13_publish_procedure.sql
 sql/14_dashboard_view_update.sql
+sql/20_foundation_slice_1.sql
 ```
 
-Then run the validation files:
-
-```text
-sql/15_validation_tests.sql
-sql/18_hackathon_final_validation.sql
-```
-
-Files `04`–`07` are retained as the earlier direct-write prototype and historical validation utilities. They are not the current governed path.
+`sql/20_foundation_slice_1.sql` is idempotent and adds the Value Control Plane objects while preserving existing Gap, Risk, and Action behavior.
 
 ### Deploy the Streamlit app
 
 From PowerShell:
 
 ```powershell
-.\scripts\deploy_production_dashboard.ps1 `
-  -ConnectionName "<SNOWFLAKE_CLI_CONNECTION>" `
-  -Database "READINESSOPS_VALIDATION" `
-  -Schema "APP" `
-  -Warehouse "READINESSOPS_WH"
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File '.\scripts\deploy_production_dashboard.ps1' `
+  -ConnectionName '<SNOWFLAKE_CLI_CONNECTION>' `
+  -Database 'READINESSOPS_VALIDATION' `
+  -Schema 'APP'
 ```
 
-The script uploads `app/streamlit_app.py` to a dedicated stage and recreates the configured Streamlit object.
+The script uploads:
 
-### Run a governed review
+- `app/environment.yml`
+- `app/value_control_plane.py`
+- `app/streamlit_app.py`
 
-In the app, open **Review setup**, add an optional business instruction, and select **Generate AI draft proposals**.
+It then recreates `READINESSOPS_VALIDATION.APP.READINESSOPS_DASHBOARD`. The Streamlit runtime is pinned to `1.35.0`.
 
-SQL equivalent:
+## Finalist E2E Flow
 
-```sql
-CALL SP_RUN_FULL_GOVERNANCE_REVIEW(
-  'RUN_001',
-  'Prioritize governance issues that could block executive approval within the next 90 days. Do not propose any gap, risk, or action that is not supported by the supplied assessment evidence.'
-);
-```
+Use an isolated Assessment Run such as `RUN_FINALIST_E2E_001`; do not modify `RUN_001`.
 
-Approve or reject a proposal:
+1. Open **Value Control Plane**.
+2. Create or link an AI Initiative.
+3. Upload TXT and PDF evidence.
+4. Confirm the original files are retained in `READINESSOPS_EVIDENCE_STAGE` and PDF text is parsed.
+5. Generate the four-section Decision Pack.
+6. Inspect and approve or reject every section.
+7. Confirm publication, then publish approved sections.
+8. Inspect **Published**, **Portfolio**, and **Audit trail**.
 
-```sql
-CALL SP_REVIEW_AGENT_PROPOSAL(
-  '<PROPOSAL_ID>',
-  'APPROVE',
-  'Reviewed against the supplied evidence and current governance requirement.'
-);
-```
+See [docs/demo-guide.md](docs/demo-guide.md) for the presentation sequence.
 
-Publish approved proposals:
+## Verified Finalist Lifecycle
 
-```sql
-CALL SP_PUBLISH_AGENT_RUN('<AGENT_RUN_ID>');
-```
+The isolated E2E run validated:
 
-## Verified Governance Lifecycle
-
-The implementation has been exercised through the following lifecycle:
-
-- Cortex completed a full review and returned 5 Gap, 2 Risk, and 5 Action drafts
-- Every generated proposal entered `REVIEW_REQUIRED`
-- Gap and Action approvals were written to decision history
-- Risk rejection remained outside governed records
-- Approved proposals remained unpublished until the explicit publication step
-- Published Gap and Action records retained source proposal and agent-run identifiers
-- Approval and publication events were visible in the Audit trail
-- Re-running publication did not create duplicate governed records
-- Visible table numbering starts at 1
-- Empty publication state provides a direct **Back to review queue** action
-- Production `READINESSOPS_DASHBOARD` was deployed and verified from the Git-tracked source
+- one linked AI Initiative
+- TXT and PDF upload with original-file retention
+- PDF parsing through Cortex document intelligence
+- strict four-section Decision Pack generation
+- four `REVIEW_REQUIRED` proposals
+- four human approvals followed by explicit publication
+- four Governed Decision Records
+- eight approval/publication audit events
+- portfolio recommendation `PROCEED` with priority `85` in the test data
+- zero proposal leakage into `RUN_001`
+- preserved Gap, Risk, and Action publication behavior
+- successful production Streamlit deployment
 
 See [docs/hackathon/FINAL_TEST_REPORT.md](docs/hackathon/FINAL_TEST_REPORT.md).
 
@@ -230,66 +218,35 @@ See [docs/hackathon/FINAL_TEST_REPORT.md](docs/hackathon/FINAL_TEST_REPORT.md).
 ```text
 solifan-readinessops/
 ├── README.md
-├── SECURITY.md
 ├── app/
 │   ├── streamlit_app.py
+│   ├── value_control_plane.py
 │   ├── environment.yml
 │   └── README.md
-├── assets/
-│   └── screenshots/
+├── assets/screenshots/
 ├── docs/
-│   ├── GOVERNANCE_AGENT_CURRENT_STATE.md
 │   ├── architecture.md
 │   ├── demo-guide.md
 │   ├── hackathon-submission.md
-│   ├── implementation-notes.md
 │   └── hackathon/
-│       ├── ARCHITECTURE.md
-│       ├── DEMO_GUIDE_JA.md
-│       ├── FINAL_TEST_REPORT.md
-│       └── SUBMISSION_DESCRIPTION_JA.md
 ├── prompts/
-│   └── readiness_agent_prompt.md
+│   ├── readiness_agent_prompt.md
+│   └── decision_pack_prompt.md
 ├── scripts/
-│   ├── deploy_production_dashboard.ps1
-│   ├── rollback_production_dashboard.ps1
-│   └── cleanup_hackathon_apps.ps1
+│   └── deploy_production_dashboard.ps1
 └── sql/
-    ├── 01_setup.sql
-    ├── 02_seed_data.sql
-    ├── 03_views.sql
-    ├── 04_stored_procedure.sql
-    ├── 05_run_agent.sql
-    ├── 06_verify_agent_run.sql
-    ├── 07_cleanup_generated_data.sql
-    ├── 10_governance_model.sql
-    ├── 11_governance_review_procedure.sql
-    ├── 12_review_procedure.sql
-    ├── 13_publish_procedure.sql
-    ├── 14_dashboard_view_update.sql
-    ├── 15_validation_tests.sql
-    └── 18_hackathon_final_validation.sql
+    ├── 01_setup.sql ... 18_hackathon_final_validation.sql
+    └── 20_foundation_slice_1.sql
 ```
-
-## Relationship to SOLIFAN CCoE Readiness Studio
-
-ReadinessOps demonstrates the governed-agent workflow behind the broader SOLIFAN CCoE Readiness Studio:
-
-```text
-Question → Evidence → Gap → Risk → Action
-```
-
-The product direction is not a one-time diagnosis. It is repeatable Enterprise AI Governance through assessment history, evidence traceability, accountable decisions, controlled publication, and operational follow-through.
 
 ## Current Limitations
 
-- Model selection is fixed to `mistral-large2` in the current procedure
-- The demonstration assessment is intentionally small and synthetic
-- Approved Risks are normalized into `READINESS_GAPS`; a dedicated canonical Risk table is not yet implemented
-- Audit history is persistent and application-recorded, but the repository does not claim storage-level immutability
-- No scheduler or event trigger is included
-- The sample model resolves one effective answer and one latest evidence item per Question
-- Production use requires environment-specific RBAC, access policies, data-retention controls, monitoring, and change management
+- The demonstration data is synthetic and intentionally small.
+- The configured generation model is fixed in the current procedure.
+- Approved legacy Risks are normalized into `READINESS_GAPS`; a dedicated Risk register is not included.
+- Audit history is persistent and application-recorded, but the repository does not claim storage-level immutability.
+- Production use requires environment-specific RBAC, access policies, retention controls, monitoring, and change management.
+- The current deliverable is a deployed Streamlit in Snowflake solution, not yet a Snowflake Native App package.
 
 ## Public-Safe Disclaimer
 

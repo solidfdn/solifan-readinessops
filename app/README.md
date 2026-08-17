@@ -2,61 +2,60 @@
 
 ## Purpose
 
-`streamlit_app.py` is the human-governed review workspace for the current ReadinessOps implementation.
-
-The application separates:
+The Streamlit in Snowflake application separates AI analysis from human decision and publication authority.
 
 ```text
-Evidence context
-→ AI proposal
-→ Human decision
-→ Controlled publication
-→ Governed record and audit trail
+Assessment + Evidence
+→ AI Draft
+→ Human Decision
+→ Explicit Publication
+→ Governed Record + Portfolio + Audit
 ```
 
 ## Files
 
 | File | Purpose |
 |---|---|
-| `streamlit_app.py` | Main Streamlit in Snowflake application |
-| `environment.yml` | Optional dependency declaration for packaging approaches that use it; the verified production deployment uploads the Python app directly |
+| `streamlit_app.py` | Main governance review application and workspace navigation |
+| `value_control_plane.py` | Initiative, TXT/PDF Evidence, Decision Pack, Published, and Portfolio workspaces |
+| `environment.yml` | Snowflake package declaration with Streamlit pinned to `1.35.0` |
 
 ## Workspaces
 
 ### Review queue
 
-- Summary of proposals awaiting a human decision
-- Issue-based review so Question, Answer, Evidence, and Rule Context appear once
-- Gap, Risk, and Action proposal tabs shown only when that proposal type exists
-- Decision status, domain, and severity filters
+- Legacy Gap, Risk, and Action review by issue
+- Question, Answer, Evidence, and Rule Context displayed together
 - Approve and Reject actions with an optional comment
-- Approved-proposal publication queue
-- Explicit **Back to review queue** action when no proposals await publication
+- Explicit approved-proposal publication queue
+
+### Value Control Plane
+
+- **Initiative:** create or link an AI Initiative to the selected Assessment Run
+- **Evidence:** upload TXT or PDF files, validate content, hash it, retain originals in `READINESSOPS_EVIDENCE_STAGE`, and parse PDFs with `AI_PARSE_DOCUMENT`
+- **Decision Pack:** generate exactly four evidence-grounded drafts; inspect structured detail; edit, approve, or reject each section; explicitly publish approved sections
+- **Published:** inspect Governed Decision Records for Governance, Value, Model Routing, and Portfolio
+- **Portfolio:** compare initiative stage, owner, governance state, value assessment, recommendation, and priority
 
 ### Published records
 
-- Governed Gap, normalized Risk, and Action records
-- Compact list plus one selected record detail
+- Governed legacy Gap, normalized Risk, and Action records
 - Source Proposal and Agent Run traceability
 
 ### Audit trail
 
-- Latest decision and publication events
-- Compact list plus selected event detail
+- Approval, rejection, and publication events
 - Actor, timestamp, state transition, proposal, and comment
 
 ### Review setup
 
 - Assessment context preview
-- Standard evidence-grounding instruction
 - Optional natural-language business instruction
-- Cortex proposal generation
-- Latest completed run and generated counts
+- Legacy Cortex proposal generation and latest-run metadata
 
 ## Runtime Compatibility
 
-The application includes compatibility handling for the deployed Snowflake Streamlit runtime:
-
+- Streamlit pinned to `1.35.0`
 - `st.rerun` with fallback to `st.experimental_rerun`
 - Dataframe rendering without unsupported `hide_index`
 - One-based visible row numbering
@@ -64,24 +63,17 @@ The application includes compatibility handling for the deployed Snowflake Strea
 
 ## Deployment
 
-Use the parameterized production script from the repository root:
+From the repository root:
 
 ```powershell
-.\scripts\deploy_production_dashboard.ps1 `
-  -ConnectionName "<SNOWFLAKE_CLI_CONNECTION>" `
-  -Database "READINESSOPS_VALIDATION" `
-  -Schema "APP" `
-  -Warehouse "READINESSOPS_WH" `
-  -Role "ACCOUNTADMIN"
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File '.\scripts\deploy_production_dashboard.ps1' `
+  -ConnectionName '<SNOWFLAKE_CLI_CONNECTION>' `
+  -Database 'READINESSOPS_VALIDATION' `
+  -Schema 'APP'
 ```
 
-The script:
-
-1. Resolves `app/streamlit_app.py` from the repository
-2. Uploads it to a dedicated production stage
-3. Recreates the configured Streamlit app
-4. Leaves the legacy rollback stage unchanged
-5. Prints the object description for verification
+The script validates and uploads `environment.yml`, `value_control_plane.py`, and `streamlit_app.py`, then recreates the configured Streamlit object.
 
 ## Governance Boundary
 
@@ -91,8 +83,8 @@ The app never treats model output as a governed record.
 Cortex AI output
 → REVIEW_REQUIRED
 → APPROVED or REJECTED by a person
-→ explicit publication
+→ explicit publication confirmation
 → governed record
 ```
 
-Rejected, unresolved, and merely approved proposals remain outside the published-record workspace until the publication procedure completes.
+Rejected, unresolved, and merely approved proposals remain outside governed records until publication completes.
