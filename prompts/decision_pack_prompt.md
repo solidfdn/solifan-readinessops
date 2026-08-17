@@ -44,7 +44,7 @@ Status: ACTIVE
 
 Same format as the existing governance review prompt.
 
-### Evidence (from EVIDENCE_ITEMS, including uploaded TXT files)
+### Evidence (from EVIDENCE_ITEMS, including uploaded TXT and parsed PDF files)
 
 ```text
 ---
@@ -53,6 +53,12 @@ Title: data_governance_policy.txt
 Source Type: UPLOADED_TXT
 Status: VALIDATED
 Content: [first 4000 chars of evidence text]
+---
+Evidence ID: EV_PDF_20260801_002
+Title: ai_risk_review.pdf
+Source Type: UPLOADED_PDF
+Status: VALIDATED
+Content: [first 4000 chars extracted with AI_PARSE_DOCUMENT]
 ```
 
 ## Required Output
@@ -70,12 +76,7 @@ Content: [first 4000 chars of evidence text]
   "value_realization": {
     "title": "...",
     "description": "Value and business outcome assessment",
-    "value_hypothesis": "...",
-    "kpis": [
-      {"name": "...", "baseline": "...", "target": "...", "measurement_window": "..."}
-    ],
-    "estimated_cost": "...",
-    "expected_benefit": "...",
+    "expected_value": "...",
     "realization_confidence": "HIGH|MEDIUM|LOW",
     "blockers": ["..."],
     "enablers": ["..."],
@@ -84,13 +85,9 @@ Content: [first 4000 chars of evidence text]
   "model_routing": {
     "title": "...",
     "description": "Model selection and routing recommendation",
-    "recommended_model_class": "...",
     "recommended_approach": "...",
     "complexity_level": "HIGH|MEDIUM|LOW",
     "data_readiness": "HIGH|MEDIUM|LOW",
-    "quality_cost_latency_constraints": ["..."],
-    "fallback_approach": "...",
-    "human_gate": "...",
     "considerations": ["..."],
     "source_evidence_ids": ["EV_001"]
   },
@@ -99,7 +96,6 @@ Content: [first 4000 chars of evidence text]
     "description": "Portfolio-level recommendation",
     "recommendation": "PROCEED|HOLD|REDESIGN|RETIRE",
     "priority_score": 85,
-    "funding_posture": "INCREASE|MAINTAIN|REDUCE|STOP",
     "rationale": "...",
     "next_review": "YYYY-MM-DD",
     "next_steps": ["..."],
@@ -127,7 +123,7 @@ Content: [first 4000 chars of evidence text]
 - Ordered assessment answers
 - Ordered evidence IDs, statuses, and content hashes
 - Additional instruction
-- Prompt/schema version `DECISION_PACK_V1`
+- Prompt/schema version `DECISION_PACK_V2`
 
 If an identical fingerprint already has a COMPLETED run, generation is skipped.
 

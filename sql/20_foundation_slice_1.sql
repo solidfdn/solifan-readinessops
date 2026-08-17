@@ -108,7 +108,7 @@ BEGIN
     LET v_val_valid BOOLEAN := FALSE;
     LET v_route_valid BOOLEAN := FALSE;
     LET v_port_valid BOOLEAN := FALSE;
-    LET v_prompt_version VARCHAR := 'DECISION_PACK_V1';
+    LET v_prompt_version VARCHAR := 'DECISION_PACK_V2';
     LET v_assessment_block VARCHAR;
     LET v_assessment_fingerprint VARCHAR;
     LET v_evidence_fingerprint VARCHAR;
@@ -271,10 +271,7 @@ BEGIN
         '  "value_realization": {\n' ||
         '    "title": "...",\n' ||
         '    "description": "Value and business outcome assessment",\n' ||
-        '    "value_hypothesis": "...",\n' ||
-        '    "kpis": [{"name":"...","baseline":"...","target":"...","measurement_window":"..."}],\n' ||
-        '    "estimated_cost": "...",\n' ||
-        '    "expected_benefit": "...",\n' ||
+        '    "expected_value": "...",\n' ||
         '    "realization_confidence": "HIGH|MEDIUM|LOW",\n' ||
         '    "blockers": ["..."],\n' ||
         '    "enablers": ["..."],\n' ||
@@ -283,13 +280,9 @@ BEGIN
         '  "model_routing": {\n' ||
         '    "title": "...",\n' ||
         '    "description": "Model selection and routing recommendation",\n' ||
-        '    "recommended_model_class": "...",\n' ||
         '    "recommended_approach": "...",\n' ||
         '    "complexity_level": "HIGH|MEDIUM|LOW",\n' ||
         '    "data_readiness": "HIGH|MEDIUM|LOW",\n' ||
-        '    "quality_cost_latency_constraints": ["..."],\n' ||
-        '    "fallback_approach": "...",\n' ||
-        '    "human_gate": "...",\n' ||
         '    "considerations": ["..."],\n' ||
         '    "source_evidence_ids": ["EV_001"]\n' ||
         '  },\n' ||
@@ -298,7 +291,6 @@ BEGIN
         '    "description": "Portfolio-level recommendation",\n' ||
         '    "recommendation": "PROCEED|HOLD|REDESIGN|RETIRE",\n' ||
         '    "priority_score": 85,\n' ||
-        '    "funding_posture": "INCREASE|MAINTAIN|REDUCE|STOP",\n' ||
         '    "rationale": "...",\n' ||
         '    "next_review": "YYYY-MM-DD",\n' ||
         '    "next_steps": ["..."],\n' ||
