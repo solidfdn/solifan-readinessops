@@ -38,17 +38,17 @@ The existing Gap, Risk, and Action governance workflow remains available and unc
 
 ## Application Screenshots
 
-### Governance Review Summary
+### Retained TXT/PDF Evidence
 
-![Governance review summary](../assets/screenshots/app_ss_01.png)
+![Retained TXT and PDF evidence](../assets/screenshots/app_ss_01.png)
 
-### Evidence-Grounded AI Review
+### Strict Four-Section Decision Pack
 
-![Natural-language AI review setup](../assets/screenshots/app_ss_02.png)
+![Strict four-section Decision Pack](../assets/screenshots/app_ss_02.png)
 
 ### Human Decision and Publication Audit
 
-![Human decision and publication audit](../assets/screenshots/app_ss_03.png)
+![Human decision and publication audit history](../assets/screenshots/app_ss_03.png)
 
 ## Evaluation Criteria Mapping
 

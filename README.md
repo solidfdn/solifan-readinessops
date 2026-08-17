@@ -48,23 +48,23 @@ The model cannot approve its own output and cannot publish directly from generat
 
 ## Product Walkthrough
 
-### 1. Governance Review Summary
+### 1. Retained TXT/PDF Evidence
 
-The workspace shows the active Assessment Run, governance metrics, latest completed review, and available review workspaces.
+The Value Control Plane retains original TXT/PDF files, parses PDF content with Cortex document intelligence, and records validation metadata.
 
-![Governance review summary](assets/screenshots/app_ss_01.png)
+![Retained TXT and PDF evidence](assets/screenshots/app_ss_01.png)
 
-### 2. Evidence-Grounded AI Review
+### 2. Strict Four-Section Decision Pack
 
-Reviewers can supply assessment evidence and an optional business instruction. The instruction may focus the analysis but cannot relax evidence grounding or publication controls.
+The generated Governance, Value, Model Routing, and Portfolio sections remain AI drafts until a person reviews each section.
 
-![Natural-language AI review setup](assets/screenshots/app_ss_02.png)
+![Strict four-section Decision Pack](assets/screenshots/app_ss_02.png)
 
 ### 3. Human Decision and Publication Audit
 
 Approval, rejection, and publication are separate state transitions with actor, timestamp, proposal, and comment traceability.
 
-![Human decision and publication audit](assets/screenshots/app_ss_03.png)
+![Human decision and publication audit history](assets/screenshots/app_ss_03.png)
 
 ## Architecture
 

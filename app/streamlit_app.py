@@ -570,6 +570,22 @@ try:
         ORDER BY a.CREATED_AT DESC, a.ACTION_ID
         """
     )
+    published_decision_df = query_df(
+        f"""
+        SELECT
+            d.DECISION_RECORD_ID AS ENTITY_ID,
+            d.DECISION_TYPE AS RECORD_TYPE,
+            d.TITLE,
+            d.DESCRIPTION,
+            d.PUBLISHED_BY,
+            d.PUBLISHED_AT,
+            d.SOURCE_PROPOSAL_ID,
+            d.SOURCE_AGENT_RUN_ID
+        FROM GOVERNED_DECISION_RECORD d
+        WHERE d.ASSESSMENT_RUN_ID = {run_id_sql}
+        ORDER BY d.PUBLISHED_AT DESC, d.DECISION_RECORD_ID
+        """
+    )
 except Exception as exc:
     st.error(f"Could not load published records: {exc}")
     st.stop()
@@ -598,7 +614,13 @@ if not published_gap_df.empty:
     published_gap_count = integer((record_types == "GAP").sum())
     published_risk_count = integer((record_types == "RISK").sum())
 published_action_count = len(published_action_df)
-published_total = published_gap_count + published_risk_count + published_action_count
+published_decision_count = len(published_decision_df)
+published_total = (
+    published_gap_count
+    + published_risk_count
+    + published_action_count
+    + published_decision_count
+)
 
 
 # ============================================================
@@ -613,7 +635,7 @@ st.markdown(
     """
 <div class="workflow">
   <div class="workflow-step"><strong>1. Evidence context</strong><span>What exists, what is missing, and what the requirement expects.</span></div>
-  <div class="workflow-step"><strong>2. AI proposal</strong><span>Gap, risk, and action drafts grounded in the supplied context.</span></div>
+  <div class="workflow-step"><strong>2. AI proposal</strong><span>Evidence-grounded decision, gap, risk, and action drafts.</span></div>
   <div class="workflow-step"><strong>3. Human decision</strong><span>Approve or reject every proposal with an audit record.</span></div>
   <div class="workflow-step"><strong>4. Published record</strong><span>Only approved proposals become governed records.</span></div>
 </div>
@@ -1175,14 +1197,15 @@ elif workspace == "Published records":
         unsafe_allow_html=True,
     )
 
-    p1, p2, p3 = st.columns(3)
+    p1, p2, p3, p4 = st.columns(4)
     p1.metric("Published gaps", published_gap_count)
     p2.metric("Published risks", published_risk_count)
     p3.metric("Published actions", published_action_count)
+    p4.metric("Published decisions", published_decision_count)
 
     record_filter = st.radio(
         "Record type",
-        options=["All", "Gap", "Risk", "Action"],
+        options=["All", "Decision", "Gap", "Risk", "Action"],
         horizontal=True,
     )
 
@@ -1214,6 +1237,20 @@ elif workspace == "Published records":
                         f"{text(row['OWNER_NAME'])} · {text(row['DUE_IN_DAYS'])} days"
                     ),
                     "_source": "action",
+                    "_row_index": row_index,
+                    "_entity_id": text(row["ENTITY_ID"]),
+                }
+            )
+    if not published_decision_df.empty:
+        for row_index, row in published_decision_df.iterrows():
+            published_records.append(
+                {
+                    "Record": text(row["TITLE"]),
+                    "Type": "DECISION",
+                    "Severity / status": text(row["RECORD_TYPE"]),
+                    "Domain": "Value Control Plane",
+                    "Owner / target": text(row["PUBLISHED_BY"]),
+                    "_source": "decision",
                     "_row_index": row_index,
                     "_entity_id": text(row["ENTITY_ID"]),
                 }
@@ -1264,7 +1301,7 @@ elif workspace == "Published records":
                 "</div>",
                 unsafe_allow_html=True,
             )
-        else:
+        elif selected_record["_source"] == "action":
             row = published_action_df.loc[selected_record["_row_index"]]
             st.markdown(
                 "<div class='published-card'>"
@@ -1277,11 +1314,28 @@ elif workspace == "Published records":
                 "</div>",
                 unsafe_allow_html=True,
             )
+        else:
+            row = published_decision_df.loc[selected_record["_row_index"]]
+            st.markdown(
+                "<div class='published-card'>"
+                f"{badge(text(row['RECORD_TYPE']), 'info')}"
+                f"{badge('Published governed record', 'success')}"
+                f"<div class='proposal-title'>{escaped(row['TITLE'])}</div>"
+                f"<div class='proposal-copy'>{escaped(row['DESCRIPTION'])}</div>"
+                f"<div class='small-muted'>Published by {escaped(row['PUBLISHED_BY'])} · "
+                f"{escaped(timestamp_text(row['PUBLISHED_AT']))}</div>"
+                "</div>",
+                unsafe_allow_html=True,
+            )
 
         trace_col1, trace_col2 = st.columns(2)
         with trace_col1:
-            st.markdown("**Assessment question**")
-            st.write(text(row["QUESTION_TEXT"]))
+            if selected_record["_source"] == "decision":
+                st.markdown("**Governed decision type**")
+                st.write(text(row["RECORD_TYPE"]))
+            else:
+                st.markdown("**Assessment question**")
+                st.write(text(row["QUESTION_TEXT"]))
         with trace_col2:
             st.markdown("**Publication source**")
             st.write(f"Proposal: {text(row['SOURCE_PROPOSAL_ID'])}")

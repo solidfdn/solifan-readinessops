@@ -1,8 +1,8 @@
 """Foundation Slice 1 — Value Control Plane module.
 
 Exposes render_value_control_plane(session, assessment_run_id, actor) which
-renders the complete Decision Pack workspace: AI Initiative, Dynamic TXT
-Evidence, Draft Decision Pack review, Published Governed Records, AI Portfolio.
+renders the complete Decision Pack workspace: AI Initiative, retained TXT/PDF
+evidence, Draft Decision Pack review, Published Governed Records, AI Portfolio.
 """
 
 import hashlib
