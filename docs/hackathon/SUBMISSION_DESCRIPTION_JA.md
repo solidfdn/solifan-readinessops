@@ -60,6 +60,7 @@ ReadinessOpsは一度の診断レポートではなく、Evidence、価値、モ
 - TXT Evidenceの検証・原本保持
 - PDF Evidenceの原本保持・Cortex解析
 - 4 Section Decision Pack生成
+- 5段階のGoverned Run Steps（5件記録、5件完了、失敗0件）
 - 4件のHuman Approval
 - 明示的Publishによる4件のGoverned Decision Record
 - 8件のAPPROVE／PUBLISH Audit Event

@@ -25,6 +25,7 @@ Finalist Value Control Plane validation was performed with isolated Assessment R
 | `ASSESSMENT_RUNS.INITIATIVE_ID` | PASS |
 | Extended `EVIDENCE_ITEMS` metadata | PASS |
 | `READINESSOPS_EVIDENCE_STAGE` | PASS |
+| `GOVERNANCE_AGENT_RUN_STEP` | PASS |
 | `GOVERNED_DECISION_RECORD` | PASS |
 | `SP_GENERATE_DECISION_PACK` | PASS |
 | `SP_EDIT_AGENT_PROPOSAL` | PASS |
@@ -65,6 +66,10 @@ Verified PDF example:
 | Evidence IDs belong to selected Run | PASS |
 | Per-section source links | PASS |
 | Draft state starts as `REVIEW_REQUIRED` | PASS |
+| Governed execution steps recorded | 5 |
+| Governed execution steps completed | 5 |
+| Running or failed steps | 0 |
+| Missing step start/end timestamps | 0 |
 
 Validated sections:
 
@@ -109,6 +114,7 @@ Confirmed:
 - Initiative create/select/link: PASS
 - TXT/PDF Evidence list and metadata: PASS
 - Decision Pack generation: PASS
+- five-step Agent execution trace: PASS
 - per-section review and approval: PASS
 - explicit Publish gate: PASS
 - Published Governed Decision Records: PASS
@@ -118,7 +124,7 @@ Confirmed:
 
 ## Acceptance Result
 
-**PASS.** The finalist build completed the isolated path from AI Initiative and retained TXT/PDF evidence through strict Decision Pack generation, human approval, explicit publication, portfolio presentation, and audit history without proposal leakage into `RUN_001`.
+**PASS.** The finalist build completed the isolated path from AI Initiative and retained TXT/PDF evidence through a five-step observable Decision Pack run, strict output validation, human approval, explicit publication, portfolio presentation, and audit history without proposal leakage into `RUN_001`.
 
 ## Operational Note
 

@@ -55,11 +55,11 @@ The Value Control Plane retains original TXT/PDF files, parses PDF content with 
 
 ![Retained TXT and PDF evidence](assets/screenshots/app_ss_01.png)
 
-### 2. Strict Four-Section Decision Pack
+### 2. Governed Decision Pack Execution
 
-The generated Governance, Value, Model Routing, and Portfolio sections remain AI drafts until a person reviews each section.
+The generated Governance, Value, Model Routing, and Portfolio sections remain AI drafts until a person reviews each section. Five persisted Run Steps make input validation, context assembly, Cortex generation, output validation, and draft persistence inspectable without adding model calls.
 
-![Strict four-section Decision Pack](assets/screenshots/app_ss_02.png)
+![Governed five-step Decision Pack execution](assets/screenshots/app_ss_02.png)
 
 ### 3. Human Decision and Publication Audit
 

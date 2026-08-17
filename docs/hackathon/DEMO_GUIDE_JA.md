@@ -37,7 +37,15 @@
 
 `Decision Pack`を開き、`Generate`を実行します。
 
-4つのSectionを示します。
+完了したAgent Runで5つのGoverned Run Stepを示します。
+
+1. Input validation
+2. Context assembly
+3. Cortex generation
+4. Output validation
+5. Draft persistence
+
+`5 recorded`、`5 completed`、`0 running`、`0 failed`を確認し、4つのSectionを示します。
 
 1. Governance
 2. Value
@@ -52,6 +60,8 @@
 - Source evidence IDs
 
 > Procedureは4 Sectionの欠落、不正なPriority、選択Runに属さないEvidence IDを拒否します。生成時点ではDraftです。
+
+動画収録でCortex生成を実行するのは1回だけとし、撮り直しでは完了済みAgent Runの画面を再利用します。
 
 ## 2:05–2:50　Human Review
 
