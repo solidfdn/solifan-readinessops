@@ -175,24 +175,25 @@ def _render_initiative(session, run_id, selected_run):
 
 
 def _render_evidence_upload(session, run_id):
-    st.subheader("Upload TXT evidence")
+    st.subheader("Upload evidence")
     files = st.file_uploader(
-        "Upload .txt files", type=["txt"], accept_multiple_files=True, key="vcp_txt_up")
+        "Upload .txt or .pdf files",
+        type=["txt", "pdf"],
+        accept_multiple_files=True,
+        key="vcp_txt_up",
+    )
 
     if files:
         for uf in files:
             raw = uf.read()
             uf.seek(0)
-            try:
-                content = raw.decode("utf-8", errors="strict")
-            except UnicodeDecodeError:
-                st.error(f"**{uf.name}**: Invalid UTF-8.")
-                continue
-            if not content.strip():
+            extension = uf.name.rsplit(".", 1)[-1].lower() if "." in uf.name else ""
+
+            if not raw:
                 st.error(f"**{uf.name}**: Empty.")
                 continue
-            if len(content) > 50_000:
-                st.error(f"**{uf.name}**: Exceeds 50,000 chars ({len(content):,}).")
+            if len(raw) > 20_000_000:
+                st.error(f"**{uf.name}**: Exceeds 20 MB.")
                 continue
 
             sha = hashlib.sha256(raw).hexdigest()
@@ -209,10 +210,12 @@ def _render_evidence_upload(session, run_id):
             except Exception:
                 pass
 
-            ev_id = f"EV_TXT_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{sha[:8]}"
-            stage_path = (
-                f"@READINESSOPS_EVIDENCE_STAGE/{run_id}/{ev_id}/{sha}.txt"
+            ev_id = (
+                f"EV_{extension.upper()}_"
+                f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{sha[:8]}"
             )
+            relative_path = f"{run_id}/{ev_id}/{sha}.{extension}"
+            stage_path = f"@READINESSOPS_EVIDENCE_STAGE/{relative_path}"
 
             try:
                 session.file.put_stream(
@@ -225,30 +228,93 @@ def _render_evidence_upload(session, run_id):
                 st.error(f"**{uf.name}**: Original file storage failed.")
                 continue
 
+            if extension == "txt":
+                try:
+                    content = raw.decode("utf-8", errors="strict")
+                except UnicodeDecodeError:
+                    st.error(f"**{uf.name}**: Invalid UTF-8.")
+                    continue
+                if not content.strip():
+                    st.error(f"**{uf.name}**: Empty text.")
+                    continue
+                if len(content) > 50_000:
+                    st.error(
+                        f"**{uf.name}**: Exceeds 50,000 chars "
+                        f"({len(content):,})."
+                    )
+                    continue
+                source_type = "UPLOADED_TXT"
+                media_type = "text/plain"
+                parser_name = "UTF8_TEXT"
+                page_count = None
+
+            elif extension == "pdf":
+                try:
+                    parsed_df = _query(
+                        session,
+                        "SELECT "
+                        "PARSED:value:content::VARCHAR AS CONTENT, "
+                        "PARSED:error::VARCHAR AS ERROR, "
+                        "PARSED:metadata:pageCount::NUMBER AS PAGE_COUNT "
+                        "FROM (SELECT AI_PARSE_DOCUMENT("
+                        "TO_FILE('@READINESSOPS_EVIDENCE_STAGE', ?), "
+                        "{'mode': 'LAYOUT'}, TRUE) AS PARSED)",
+                        [relative_path],
+                    )
+                    if parsed_df.empty:
+                        st.error(f"**{uf.name}**: PDF parsing returned no result.")
+                        continue
+                    parse_error = _text(parsed_df.iloc[0]["ERROR"], "")
+                    content = _text(parsed_df.iloc[0]["CONTENT"], "")
+                    page_count = _integer(parsed_df.iloc[0]["PAGE_COUNT"])
+                    if parse_error:
+                        st.error(f"**{uf.name}**: PDF parsing failed.")
+                        continue
+                    if not content.strip():
+                        st.error(f"**{uf.name}**: No text extracted from PDF.")
+                        continue
+                except Exception:
+                    st.error(f"**{uf.name}**: PDF parsing failed.")
+                    continue
+
+                source_type = "UPLOADED_PDF"
+                media_type = "application/pdf"
+                parser_name = "AI_PARSE_DOCUMENT_LAYOUT"
+
+            else:
+                st.error(f"**{uf.name}**: Unsupported file type.")
+                continue
+
             _execute(
                 session,
-                "INSERT INTO EVIDENCE_ITEMS (EVIDENCE_ID,RUN_ID,QUESTION_ID,"
+                "INSERT INTO EVIDENCE_ITEMS ("
+                "EVIDENCE_ID,RUN_ID,QUESTION_ID,"
                 "EVIDENCE_TITLE,EVIDENCE_TEXT,EVIDENCE_STATUS,"
                 "SOURCE_FILENAME,SOURCE_TYPE,MEDIA_TYPE,"
                 "CONTENT_SHA256,BYTE_COUNT,CHAR_COUNT,STAGE_PATH,"
-                "UPLOADED_AT,UPLOADED_BY) "
-                "VALUES (?, ?, NULL, ?, ?, 'VALIDATED', ?, 'UPLOADED_TXT', "
-                "'text/plain', ?, ?, ?, ?, CURRENT_TIMESTAMP(), CURRENT_USER())",
+                "PARSER_NAME,PAGE_COUNT,UPLOADED_AT,UPLOADED_BY"
+                ") VALUES ("
+                "?, ?, NULL, ?, ?, 'VALIDATED', ?, ?, ?, "
+                "?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP(), CURRENT_USER())",
                 [
-                    ev_id, run_id, uf.name, content, uf.name, sha,
-                    len(raw), len(content), stage_path,
+                    ev_id, run_id, uf.name, content, uf.name,
+                    source_type, media_type, sha, len(raw), len(content),
+                    stage_path, parser_name, page_count,
                 ],
             )
             st.success(
-                f"**{uf.name}** stored and staged ({len(content):,} chars)"
+                f"**{uf.name}** stored, parsed, and validated "
+                f"({len(content):,} chars)"
             )
 
     try:
         ev_df = _query(
             session,
-            "SELECT EVIDENCE_ID,SOURCE_FILENAME,CHAR_COUNT,CONTENT_SHA256,"
-            "STAGE_PATH,EVIDENCE_STATUS,UPLOADED_AT FROM EVIDENCE_ITEMS "
-            "WHERE RUN_ID = ? AND SOURCE_TYPE = 'UPLOADED_TXT' "
+            "SELECT EVIDENCE_ID,SOURCE_FILENAME,SOURCE_TYPE,CHAR_COUNT,"
+            "PAGE_COUNT,PARSER_NAME,STAGE_PATH,EVIDENCE_STATUS,UPLOADED_AT "
+            "FROM EVIDENCE_ITEMS "
+            "WHERE RUN_ID = ? "
+            "AND SOURCE_TYPE IN ('UPLOADED_TXT', 'UPLOADED_PDF') "
             "ORDER BY UPLOADED_AT DESC",
             [run_id],
         )
@@ -257,8 +323,10 @@ def _render_evidence_upload(session, run_id):
             _show_df(ev_df.rename(columns={
                 "EVIDENCE_ID": "ID",
                 "SOURCE_FILENAME": "File",
+                "SOURCE_TYPE": "Type",
                 "CHAR_COUNT": "Chars",
-                "CONTENT_SHA256": "SHA-256",
+                "PAGE_COUNT": "Pages",
+                "PARSER_NAME": "Parser",
                 "STAGE_PATH": "Stored path",
                 "EVIDENCE_STATUS": "Status",
                 "UPLOADED_AT": "Uploaded",
