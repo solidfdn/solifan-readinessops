@@ -43,13 +43,23 @@ The existing Gap, Risk, and Action governance workflow remains available and unc
 
 ![Retained TXT and PDF evidence](../assets/screenshots/app_ss_01.png)
 
-### Strict Four-Section Decision Pack
+### Governed Decision Pack Execution
 
-![Strict four-section Decision Pack](../assets/screenshots/app_ss_02.png)
+![Governed five-step Decision Pack execution](../assets/screenshots/app_ss_02.png)
 
 ### Human Decision and Publication Audit
 
 ![Human decision and publication audit history](../assets/screenshots/app_ss_03.png)
+
+## Finalist Feedback Coverage
+
+| Requested refinement | Implemented evidence |
+|---|---|
+| Evaluator login or demo access | Deployed `READINESSOPS_VALIDATION.APP.READINESSOPS_DASHBOARD`, documented demo path, and public reconstruction assets |
+| Dynamic evidence ingestion | TXT/PDF upload, original-file stage retention, SHA-256 metadata, and Cortex PDF parsing |
+| Live CoCo multi-step orchestration | Five persisted Snowflake-native Run Steps expose status, timing, and failure point around the single Cortex generation call |
+| Post-approval operational action loop | Approved proposals require explicit publication and become governed Decision, Gap, Risk, or Action records with portfolio and audit outputs |
+| Inline editing of draft proposals | `Edit before deciding` updates a draft while preserving human decision and publication boundaries |
 
 ## Evaluation Criteria Mapping
 

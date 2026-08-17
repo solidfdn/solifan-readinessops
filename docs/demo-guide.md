@@ -61,7 +61,15 @@ Explain:
 
 Open **Decision Pack** and select **Generate**.
 
-Show the completed Agent Run and the four tabs:
+Show the completed Agent Run and its five governed execution steps:
+
+1. Input validation
+2. Context assembly
+3. Cortex generation
+4. Output validation
+5. Draft persistence
+
+Confirm `5 recorded`, `5 completed`, `0 running`, and `0 failed`, then show the four tabs:
 
 1. Governance
 2. Value
@@ -79,6 +87,8 @@ Open one section and show:
 Explain:
 
 > The procedure rejects incomplete output, invalid priorities, or evidence IDs that do not belong to this Assessment Run. Generation creates drafts only.
+
+For recording, run Cortex generation once. Retakes should reuse the completed Agent Run screen rather than create additional runs.
 
 ### 2:05–2:50 — Make accountable decisions
 
