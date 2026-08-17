@@ -2,77 +2,81 @@
 
 ## 一文説明
 
-ReadinessOpsは、AI導入準備のEvidence不足を起点に、AIがGap・Risk・Actionを提案し、人の承認と明示的なPublishを経て、正式なガバナンス記録と判断履歴へ変換するSnowflake-nativeの運用基盤です。
+ReadinessOpsは、TXT／PDF EvidenceからGovernance・Value・Model Routing・Portfolioの4 Section Decision Packを生成し、人のレビューと明示的なPublishを経て、正式な判断記録・Portfolio・Auditへ変換するSnowflake-nativeのAI Value Control Planeです。
 
 ## 解決する課題
 
-AIガバナンスは、成熟度スコアやレポートを出すだけでは運用できません。
+企業のAI Initiativeでは、AIの提案内容だけでなく、次を継続管理する必要があります。
 
-```text
-Question
-→ Answer
-→ Evidence
-→ Gap
-→ Risk
-→ Action
-→ Human Decision
-→ Published Record
-```
+- 何のEvidenceに基づくか
+- Governanceと事業価値をどう評価したか
+- どのModel Routingが適切か
+- 誰が承認したか
+- 何が正式記録になったか
+- Portfolio内で優先すべきか
 
-この判断過程と根拠を継続管理する必要があります。
+ReadinessOpsは、この判断過程をSnowflake内で一つの運用フローにします。
 
 ## 制御境界
 
 ```text
-Requirement / Rule Context
-→ AI Proposed
-→ Human Approved
+Evidence Supplied
+→ AI Drafted
+→ Human Reviewed
 → Explicitly Published
+→ Governed Record
 ```
 
-AIは提案できますが、自ら承認・公開することはできません。
+AIはEvidenceを解析して提案できますが、自ら承認・公開することはできません。
 
 ## 技術的実装
 
-- Snowflake StreamlitによるHuman Review Workspace
-- Snowflake CortexによるGap・Risk・Actionの構造化提案
-- SQL Stored Procedureによる生成、承認・却下、Publish
-- DraftとGoverned Recordの分離
-- Source Proposal IDによる二重公開防止
-- Question、Answer、Evidence、Rule Context、Agent RunまでのTraceability
-- 承認・却下・公開を記録するAudit History
-- Issue単位のReview UI
-- Published recordsとAudit trailの一覧＋詳細表示
-- 1始まりの通番と空状態からのBack操作
+- Snowflake StreamlitによるValue Control Plane
+- AI InitiativeとAssessment Runの紐付け
+- TXT／PDF Evidence Upload
+- Original FileのSnowflake Stage保持
+- Cortex `AI_PARSE_DOCUMENT`によるPDF解析
+- Cortex `COMPLETE`による4 Section Decision Pack生成
+- 完全な4 Section、Required Field、Priority、Evidence IDの厳格検証
+- Proposal DraftとGoverned Decision Recordの分離
+- Human Edit／Approve／Reject
+- 明示的Publish確認
+- 重複正式記録・重複Audit Historyの防止
+- Governance／Value／Routing／PortfolioのPublished Record
+- `V_AI_PORTFOLIO`によるInitiative比較
+- Actor、Timestamp、State Transitionを保持するAudit History
 
 ## 実社会との関連性
 
-企業がAIを導入する際に必要なのは、一度の診断ではありません。
+対象利用者はCCoE、AI Governance、Risk Management、事業責任者、内部監査、経営層です。
 
-- Evidence不足
-- 判断責任者
-- 優先度
-- 期限
-- 承認理由
-- 正式記録
-- 監査履歴
-
-を継続して管理する必要があります。
-
-ReadinessOpsは、CCoE、リスク管理、データガバナンス、内部監査、経営層が同じ判断履歴を共有するOperating Platformを目指します。
+ReadinessOpsは一度の診断レポートではなく、Evidence、価値、モデル選択、人の責任、正式記録、Portfolio判断を継続運用するControl Planeです。正式記録はBI、Reporting、次のGoverned Workflowへ接続できます。
 
 ## 実機確認
 
-- 5 Gap、2 Risk、5 ActionのDraft生成
-- Gapの承認・Publish
-- RiskのReject・非公開
-- Actionの承認・Publish
-- 承認とPublishの履歴分離
-- 重複Publish防止
-- Published Recordから根拠への追跡
-- 本番App表示
-- Git main反映
+専用の`RUN_FINALIST_E2E_001`で以下を確認しました。
+
+- AI Initiative作成・紐付け
+- TXT Evidenceの検証・原本保持
+- PDF Evidenceの原本保持・Cortex解析
+- 4 Section Decision Pack生成
+- 4件のHuman Approval
+- 明示的Publishによる4件のGoverned Decision Record
+- 8件のAPPROVE／PUBLISH Audit Event
+- Published Workspace
+- Portfolio Workspace
+- Audit Trail
+- `RUN_001`へのProposal漏洩0件
+- Production Streamlit Deployment成功
+
+## 既存機能との互換性
+
+既存のGap、Risk、Actionフローは維持しています。`DECISION_*` Proposalだけを新しい`GOVERNED_DECISION_RECORD`へ公開し、Gap、Risk、Actionは従来のCanonical Mappingを使用します。
 
 ## 現在の制約
 
-専用Riskテーブルは未実装です。承認されたRiskは`READINESS_GAPS`へ`[RISK]`付きで正規化し、Source ProposalによってRiskとして追跡します。
+- 合成データによる最終選考用実装です。
+- 生成Modelは現行Procedure内で固定しています。
+- Legacy Riskは専用Risk Tableではなく`READINESS_GAPS`へ`[RISK]`付きで正規化します。
+- 本番利用にはRBAC、Tenant分離、Retention、Monitoring、変更管理が必要です。
+- 現在はStreamlit in SnowflakeとしてDeploy済みで、Snowflake Native App Package化は次の製品化段階です。

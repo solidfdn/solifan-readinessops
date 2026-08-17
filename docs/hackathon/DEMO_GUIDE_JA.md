@@ -1,101 +1,103 @@
-# 4分デモ手順
+# 最終選考 4分デモ手順
 
-## 0:00–0:30　課題と制御境界
+## 0:00–0:25　制御境界
 
-画面上部の4ステップを示します。
+`Finalist E2E Validation`を選択し、`Value Control Plane`を開きます。
 
-> Evidence不足を起点に、AIがGap・Risk・Actionを提案します。
-> AI出力は直接正式データになりません。
-> 人が承認し、明示的にPublishしたものだけが統制済み記録になります。
+> ReadinessOpsは、EvidenceをAIの提案、Human Review、正式なPublishへつなげます。AIは提案できますが、自ら承認・公開はできません。
 
-件数はデモ操作によって変わるため、固定値ではなく意味を説明します。
+## 0:25–0:50　AI Initiative
 
-## 0:30–1:10　自然言語によるレビュー優先度
-
-`Review setup`を開きます。
-
-`Additional business instruction`へ入力します。
-
-```text
-Prioritize governance issues that could block executive approval within the next 90 days. Do not propose any gap, risk, or action that is not supported by the supplied assessment evidence.
-```
-
-`Generate AI draft proposals`を実行します。
+`Initiative`を開き、`Claims Triage AI — E2E`がAssessment Runへ紐づいていることを示します。
 
 示す内容:
 
-- Question、Answer、Evidence、Rule Contextを入力に使用
-- 追加指示は優先度を補足する
-- Evidence groundingの固定ルールは解除されない
-- 生成結果は`REVIEW_REQUIRED`で保存される
-- AIは承認もPublishもできない
+- Initiative名
+- Owner
+- Stage
+- 選択中のAssessment Run
 
-## 1:10–2:15　根拠を確認して人が判断
+## 0:50–1:25　TXT／PDF Evidence
 
-`Review queue` → `Review by issue`を開きます。
-
-最初のAssessment issueが既に表示されている場合は、そのまま使用します。必要な場合だけプルダウンで変更します。
+`Evidence`を開き、合成TXTと合成PDFをアップロードします。
 
 示す内容:
 
-- Current Answer
-- Evidence
-- Requirement / Rule Context
-- 関連するGap / Risk / Action
-- Why the AI raised this proposal
-- Source traceability
+- `stored, parsed, and validated`の成功表示
+- TXT／PDFのSource Type
+- 文字数、PDFページ数、Parser
+- SHA-256
+- Snowflake Stage上の保存先
 
-Actionを1件開き、Decision commentへ入力します。
+説明:
 
-```text
-DEMO_APPROVE — reviewed against the supplied evidence and current governance requirement.
-```
+> 元ファイルをSnowflake Stageに保持し、PDFはCortex `AI_PARSE_DOCUMENT`でテキスト化します。抽出テキストだけでなく原本と来歴も残します。
 
-`Approve`を実行します。
+## 1:25–2:05　Decision Pack生成
 
-件数変化:
+`Decision Pack`を開き、`Generate`を実行します。
 
-- Needs human decision: 1減る
-- Approved, not published: 1増える
-- Published governance records: 変化しない
+4つのSectionを示します。
 
-## 2:15–3:00　統制されたPublish
+1. Governance
+2. Value
+3. Routing
+4. Portfolio
 
-`Approved & publish`を開きます。
+1件を開き、以下を示します。
 
-確認チェックを入れ、`Publish approved proposals`を実行します。
+- `AI Draft`
+- PriorityとRationale
+- Structured detail
+- Source evidence IDs
 
-示す点:
+> Procedureは4 Sectionの欠落、不正なPriority、選択Runに属さないEvidence IDを拒否します。生成時点ではDraftです。
 
-- 承認だけでは正式記録にならない
-- Publishを明示実行して初めて正式記録になる
-- Source Proposal IDにより二重公開を防止する
+## 2:05–2:50　Human Review
 
-承認済み提案がない場合は、`Back to review queue`で戻れます。
+4 Sectionを順に承認します。必要なら1件だけ`Edit before deciding`を示します。
 
-## 3:00–3:35　正式記録とトレーサビリティ
+確認点:
 
-`Published records`を開きます。
+- `AI Draft`から`Human Reviewed`へ遷移
+- Decision ActorとTimestamp
+- 承認済み件数の増加
+- Publish確認前はPublishボタンが無効
 
-新しく公開した記録を選び、以下を示します。
+> Approveは人の判断を記録しますが、まだ正式記録にはしません。
 
-- Record type
-- Description
-- Owner / Target
-- Assessment Question
-- Source Proposal
-- Agent Run
+## 2:50–3:20　明示的Publish
 
-## 3:35–4:00　監査履歴
+`Confirm publication of approved sections`へチェックし、`Publish`を実行します。
 
-`Audit trail`を開きます。
+示す内容:
 
-最新の2件を示します。
+- `Published 4 decision(s)`
+- `Published Governed Record`
 
-1. `PUBLISH`
-2. `APPROVE`
+> Publishは別の権限境界です。承認済みだけを正式記録にし、重複書込みと重複履歴を防ぎます。
+
+## 3:20–3:45　Published／Portfolio
+
+`Published`で4件のGoverned Decision Recordを示します。続けて`Portfolio`で以下を示します。
+
+- Initiative
+- Governance
+- Value
+- Recommendation
+- Priority
+
+## 3:45–4:00　Audit
+
+`Audit trail`を開き、`APPROVE`と`PUBLISH`が別イベントとしてActor、Timestamp付きで残ることを示します。
 
 締め:
 
-> AIが提案し、人が承認し、正式記録と判断履歴を残す。
-> ReadinessOpsは診断画面ではなく、Enterprise AI Governanceを継続運用する基盤です。
+> AIがEvidenceから提案し、人が判断し、Snowflakeが正式記録と判断履歴を保持する。ReadinessOpsはAI Initiativeを継続統制するValue Control Planeです。
+
+## デモ時の注意
+
+- `RUN_001`は使用・変更せず、`RUN_FINALIST_E2E_001`だけを使用する
+- 不要な再生成を避け、既に成功したAgent Runを表示してもよい
+- Live件数ではなく、状態遷移とTraceabilityを説明する
+- 使用するEvidenceは小さな合成データに限定する

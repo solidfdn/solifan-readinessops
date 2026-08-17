@@ -2,73 +2,59 @@
 
 ## Purpose
 
-ReadinessOps is a Snowflake-native governance workspace that converts assessment context into reviewable AI proposals, accountable human decisions, and governed operational records.
+ReadinessOps is a Snowflake-native governance workspace that converts initiative context and evidence into reviewable AI proposals, accountable human decisions, governed records, and a portfolio view.
 
-The central design decision is the separation between:
+The central boundary is unchanged across both supported workflows:
 
 ```text
-AI proposal authority
-and
-human governance authority
+AI proposes; a person decides; explicit publication creates the governed record.
 ```
 
-## End-to-End Flow
+## Finalist Value Control Plane Flow
 
 ```mermaid
 flowchart TD
-    subgraph Assessment Context
+    subgraph Context
+        AI[AI_INITIATIVE]
         AR[ASSESSMENT_RUNS]
-        RQ[READINESS_QUESTIONS]
-        AA[ASSESSMENT_ANSWERS]
         EI[EVIDENCE_ITEMS]
+        ES[READINESSOPS_EVIDENCE_STAGE]
     end
 
-    subgraph Governed Generation
-        SP1[SP_RUN_FULL_GOVERNANCE_REVIEW]
+    subgraph Intelligence
+        PDF[AI_PARSE_DOCUMENT]
+        DP[SP_GENERATE_DECISION_PACK]
         CX[SNOWFLAKE.CORTEX.COMPLETE]
-        GR[GOVERNANCE_AGENT_RUN]
-        GP[GOVERNANCE_AGENT_PROPOSAL]
-        GS[GOVERNANCE_AGENT_PROPOSAL_SOURCE]
     end
 
-    subgraph Human Decision
-        ST[Streamlit Governance Review]
-        SP2[SP_REVIEW_AGENT_PROPOSAL]
+    subgraph Governance
+        GP[GOVERNANCE_AGENT_PROPOSAL]
+        HR[Human Review]
+        PH[SP_PUBLISH_AGENT_RUN]
         AH[GOVERNANCE_APPROVAL_HISTORY]
     end
 
-    subgraph Controlled Publication
-        SP3[SP_PUBLISH_AGENT_RUN]
-        RG[READINESS_GAPS]
-        RA[RECOMMENDED_ACTIONS]
-        VW[V_READINESSOPS_ACTION_BOARD]
+    subgraph Outcomes
+        DR[GOVERNED_DECISION_RECORD]
+        PV[V_AI_PORTFOLIO]
+        ST[Streamlit Value Control Plane]
     end
 
-    AR --> SP1
-    RQ --> SP1
-    AA --> SP1
-    EI --> SP1
-
-    SP1 --> CX
-    CX --> SP1
-    SP1 --> GR
-    SP1 --> GP
-    SP1 --> GS
-
-    GP --> ST
-    GS --> ST
-    ST --> SP2
-    SP2 --> GP
-    SP2 --> AH
-
-    GP --> SP3
-    SP3 --> RG
-    SP3 --> RA
-    SP3 --> AH
-
-    RG --> VW
-    RA --> VW
-    VW --> ST
+    AI --> AR
+    AR --> EI
+    EI --> ES
+    EI --> PDF
+    AR --> DP
+    PDF --> DP
+    DP --> CX
+    CX --> GP
+    GP --> HR
+    HR --> AH
+    HR --> PH
+    PH --> DR
+    PH --> AH
+    DR --> PV
+    PV --> ST
 ```
 
 ## Governance State Model
@@ -83,158 +69,130 @@ stateDiagram-v2
     PUBLISHED --> [*]
 ```
 
-A proposal can become `PUBLISHED` only after a person has moved it to `APPROVED`.
+Generation never writes to `GOVERNED_DECISION_RECORD`. A proposal can become `PUBLISHED` only after a person moves it to `APPROVED` and confirms publication.
 
 ## Responsibility Model
 
 | Layer | Responsibility | Cannot do |
 |---|---|---|
-| Assessment context | Supplies Question, Answer, Evidence, and Rule Context | Approve or publish proposals |
-| Cortex | Generates Gap, Risk, and Action drafts | Write governed records directly |
-| Human review | Approves or rejects individual proposals | Bypass the publication procedure |
-| Publication procedure | Writes approved proposals and records publication | Publish unresolved or rejected proposals |
-| Presentation layer | Shows governed records and traceability | Treat drafts as published truth |
+| Initiative and assessment | Define ownership, stage, answers, and expected evidence | Approve or publish proposals |
+| Evidence intake | Validate content, retain original files, parse PDFs, and store metadata | Convert evidence directly into a governed decision |
+| Cortex AI | Generate the four-section Decision Pack or legacy Gap/Risk/Action drafts | Approve or publish its output |
+| Human review | Inspect, edit, approve, or reject each proposal | Bypass publication controls |
+| Publication procedure | Publish approved proposals idempotently and append history | Publish unresolved or rejected proposals |
+| Presentation layer | Show drafts, published records, portfolio state, and history | Treat drafts as published truth |
 
 ## Data Responsibilities
 
 | Object | Responsibility |
 |---|---|
-| `ASSESSMENT_RUNS` | Assessment execution container |
-| `READINESS_QUESTIONS` | Question and expected-evidence requirement |
-| `ASSESSMENT_ANSWERS` | Effective answer for a Run and Question |
-| `EVIDENCE_ITEMS` | Supplied supporting evidence |
-| `GOVERNANCE_AGENT_RUN` | Review execution, model, instruction, status, timestamps, fingerprint, and summary |
-| `GOVERNANCE_AGENT_PROPOSAL` | Gap, Risk, or Action draft and review state |
-| `GOVERNANCE_AGENT_PROPOSAL_SOURCE` | Proposal-to-source traceability |
+| `AI_INITIATIVE` | Initiative identity, owner, stage, and status |
+| `ASSESSMENT_RUNS` | Assessment execution and initiative link |
+| `EVIDENCE_ITEMS` | Extracted text, validation state, hash, source metadata, parser metadata, and stage path |
+| `READINESSOPS_EVIDENCE_STAGE` | Original TXT and PDF evidence retention |
+| `GOVERNANCE_AGENT_RUN` | Generation execution, model, instruction, status, timestamps, and summary |
+| `GOVERNANCE_AGENT_PROPOSAL` | Legacy or Decision Pack draft and lifecycle state |
+| `GOVERNANCE_AGENT_PROPOSAL_SOURCE` | Proposal-to-evidence source links |
 | `GOVERNANCE_APPROVAL_HISTORY` | Approval, rejection, and publication events |
-| `READINESS_GAPS` | Governed Gap records and normalized Risk records |
-| `RECOMMENDED_ACTIONS` | Governed Action records |
-| `V_READINESSOPS_ACTION_BOARD` | Governed dashboard presentation |
+| `GOVERNED_DECISION_RECORD` | Published Governance, Value, Model Routing, and Portfolio decisions |
+| `V_AI_PORTFOLIO` | Initiative-level governance and value presentation |
+| `READINESS_GAPS` | Published legacy Gap records and normalized Risk records |
+| `RECOMMENDED_ACTIONS` | Published legacy Action records |
 
-## Procedures
+## Evidence Intake
 
-### `SP_RUN_FULL_GOVERNANCE_REVIEW`
+TXT and PDF uploads use the same controlled pattern:
+
+1. Validate the uploaded file and compute SHA-256.
+2. Detect duplicate evidence within the Assessment Run.
+3. Retain the original file under a Run- and Evidence-specific stage path.
+4. Decode TXT locally or parse PDF with `AI_PARSE_DOCUMENT`.
+5. Store extracted text, counts, parser metadata, uploader, timestamp, hash, and stage path in `EVIDENCE_ITEMS`.
+6. Mark only successfully stored and parsed content as `VALIDATED`.
+
+This preserves both the machine-readable evidence text and the original source artifact.
+
+## Decision Pack Procedure
+
+### `SP_GENERATE_DECISION_PACK`
 
 Inputs:
 
 - Assessment Run ID
-- Optional additional business instruction
+- Optional additional instruction
 
 Behavior:
 
-1. Validates the Assessment Run
-2. Creates a governance Agent Run
-3. Builds the prompt from Question, Answer, Evidence, and Rule Context
-4. Adds the optional business instruction without removing the standard grounding requirement
-5. Calls Snowflake Cortex
-6. Removes optional markdown fences and parses JSON defensively
-7. Creates Gap, Risk, and Action proposals as `REVIEW_REQUIRED`
-8. Normalizes priority values
-9. Creates source-traceability rows
-10. Marks the run `COMPLETED` or `FAILED`
+1. Validates the Assessment Run, linked initiative, and available evidence.
+2. Creates a Decision Pack Agent Run.
+3. Builds a prompt from assessment and uploaded evidence.
+4. Calls `SNOWFLAKE.CORTEX.COMPLETE('mistral-large2', ...)`.
+5. Removes optional markdown fences and parses JSON defensively.
+6. Requires exactly four objects: `governance_summary`, `value_realization`, `model_routing`, and `portfolio_recommendation`.
+7. Validates required fields, priority as an integer from 1 through 100, and non-empty source evidence IDs.
+8. Confirms every cited evidence ID belongs to the selected Assessment Run.
+9. Creates four `REVIEW_REQUIRED` proposals and per-section source links.
+10. Marks the run `COMPLETED` or records a controlled failure.
 
-### `SP_REVIEW_AGENT_PROPOSAL`
+### `SP_EDIT_AGENT_PROPOSAL`
 
-Inputs:
-
-- Proposal ID
-- `APPROVE` or `REJECT`
-- Optional Decision comment
-
-Behavior:
-
-- Updates one proposal
-- Records reviewer identity and timestamp
-- Appends a decision event to `GOVERNANCE_APPROVAL_HISTORY`
-- Does not publish a governed record
+Allows a reviewer to edit one draft before deciding. Editing does not approve or publish it.
 
 ### `SP_PUBLISH_AGENT_RUN`
 
-Input:
+The existing publication procedure is extended additively:
 
-- Agent Run ID
+- Gap → `READINESS_GAPS`
+- Risk → `READINESS_GAPS` with `[RISK]` prefix
+- Action → `RECOMMENDED_ACTIONS`
+- `DECISION_*` → `GOVERNED_DECISION_RECORD`
 
-Behavior:
-
-- Freezes the approved proposals at the beginning of the call
-- Publishes approved Gaps to `READINESS_GAPS`
-- Publishes approved Risks to `READINESS_GAPS` with a `[RISK]` title prefix
-- Publishes approved Actions to `RECOMMENDED_ACTIONS`
-- Stores Source Proposal and Agent Run identifiers
-- Updates proposal state to `PUBLISHED`
-- Appends publication events
-- Prevents duplicate canonical writes and duplicate publication history
-
-## Canonical Risk Normalization
-
-Risk is a first-class proposal type in:
-
-- Cortex output
-- `GOVERNANCE_AGENT_PROPOSAL`
-- Human review
-- Decision history
-- Published-record classification in the app
-
-The demonstration schema does not include a dedicated canonical Risk table. Therefore, approved Risks are normalized into `READINESS_GAPS` with:
-
-```text
-GAP_TITLE = '[RISK] ' || proposal title
-SOURCE_PROPOSAL_ID = Risk proposal ID
-SOURCE_AGENT_RUN_ID = Agent Run ID
-```
-
-The application recovers the published record type by joining the canonical row back to its source proposal. A future production model should introduce a dedicated Risk register when independent Risk ownership, treatment, acceptance, and residual-risk fields are required.
+For every type it publishes only `APPROVED` proposals, sets the published entity identifier, updates proposal state, appends a `PUBLISH` event, and prevents duplicate writes.
 
 ## Traceability
 
 ```text
-Assessment Run
-  → Question
-  → Answer
-  → Evidence Item
-  → Requirement / Rule Context
-  → Agent Run
-  → Proposal
-  → Human Decision
-  → Published Record
+AI Initiative
+→ Assessment Run
+→ Evidence Item
+→ Original Stage File
+→ Agent Run
+→ Decision Pack Proposal
+→ Human Decision
+→ Governed Decision Record
+→ Portfolio View
 ```
 
-## Presentation Layer
+Every published Decision Pack section retains source proposal, agent run, assessment run, initiative, evidence links, actor, and timestamp.
 
-`V_READINESSOPS_ACTION_BOARD` is the governed presentation source. It excludes legacy `AR_%` records created by the earlier direct-write prototype.
+## Compatibility with Existing Governance
 
-The Streamlit app separately presents:
-
-- Latest unresolved and reviewed proposals
-- Governed records
-- Decision and publication history
-- Assessment context
-- Agent Run metadata
-
-## Audit Semantics
-
-`GOVERNANCE_APPROVAL_HISTORY` is persistent application-recorded history. The current repository does not claim storage-level immutability. Production hardening should add role separation, restricted update/delete privileges, retention policy, monitoring, and independent audit export.
+The finalist migration does not replace the existing Question/Answer governance path. Existing Gap, Risk, and Action generation, review, canonical mapping, and audit behavior remain available. Decision Pack proposal types occupy a separate namespace (`DECISION_*`) and publish to a separate governed table.
 
 ## Key Design Decisions
 
 | Decision | Rationale |
 |---|---|
-| Separate proposals from governed tables | Prevents model output from silently becoming the system of record |
-| Human decision per proposal | Supports selective approval and rejection |
+| Preserve original evidence files | Supports inspection, replay, and provenance beyond extracted text |
+| Strict four-section contract | Prevents partial or structurally ambiguous Decision Packs |
+| Evidence-ID validation | Prevents invented or cross-run citations |
+| Separate proposals and records | Prevents model output from becoming the system of record |
+| Human decision per section | Allows selective approval, rejection, and editing |
 | Separate approval and publication | Makes write authority explicit |
-| Source row per proposal | Makes evidence grounding inspectable |
-| Input fingerprint | Supports repeatability and run comparison |
-| Priority normalization | Handles model output variation defensively |
-| Issue-based UI | Avoids repeating evidence context for every proposal |
-| One-based list numbering | Matches user expectations for review lists |
-| Back-to-queue action | Prevents dead ends in an empty publication state |
-| Canonical dashboard filter | Keeps the legacy direct-write prototype outside governed results |
+| Additive publication extension | Protects the validated legacy Gap/Risk/Action behavior |
+| Isolated E2E Run | Verifies the finalist path without modifying `RUN_001` |
 
 ## Snowflake Features
 
-- `SNOWFLAKE.CORTEX.COMPLETE()` for inference
-- SQL stored procedures for governed workflows
-- `VARIANT`, `FLATTEN`, and `TRY_PARSE_JSON`
-- Streamlit in Snowflake for human review
-- Views for presentation
+- Snowflake Cortex `COMPLETE` for structured Decision Pack generation
+- Cortex `AI_PARSE_DOCUMENT` for PDF extraction
+- Streamlit in Snowflake for evidence intake and human governance
+- SQL stored procedures for validation and controlled state transitions
+- `VARIANT`, `FLATTEN`, `TRY_PARSE_JSON`, and `OBJECT_KEYS`
+- Internal stages for original-file retention
+- Views for portfolio presentation
 - Snowflake identity and timestamps for attribution
+
+## Production Hardening
+
+The demonstration uses synthetic data. Production deployment should add role separation, least-privilege grants, stage and row-access policies, retention rules, monitoring, independent audit export, tenant isolation, and controlled model/version configuration.

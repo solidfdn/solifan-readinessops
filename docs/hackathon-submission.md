@@ -2,35 +2,39 @@
 
 ## Project
 
-**SOLIFAN ReadinessOps — Human-Governed AI Readiness Management on Snowflake**
+**SOLIFAN ReadinessOps — Human-Governed AI Value Control on Snowflake**
 
 ## One-Sentence Description
 
-A Snowflake-native governance workspace that uses Cortex AI to create evidence-grounded Gap, Risk, and Action drafts, requires an accountable human decision, and publishes only approved proposals as governed records with traceable history.
+A Snowflake-native control plane that converts TXT/PDF evidence into a four-section AI Decision Pack, requires accountable human review and explicit publication, and preserves governed records, portfolio signals, and audit history.
 
 ## Problem
 
-A readiness score does not operate governance. Organizations must continuously connect:
+Organizations can generate AI recommendations quickly, but they still struggle to answer:
 
-```text
-Question → Answer → Evidence → Gap → Risk → Action → Decision
-```
+- What evidence supported the recommendation?
+- Who approved it?
+- Was value considered alongside governance and model routing?
+- Which output became the official record?
+- How does the initiative compare with the rest of the portfolio?
 
-A direct-write AI agent is unsafe because generated text can become the system of record without accountable review, publication authority, or a preserved basis for the decision.
+Without those controls, generated text can silently become operational truth.
 
 ## Solution
 
 ReadinessOps separates analysis from authority:
 
-1. Read Assessment Run answers, evidence, and Requirement / Rule Context
-2. Accept an optional natural-language business priority
-3. Generate Gap, Risk, and Action drafts with Snowflake Cortex
-4. Store every proposal as `REVIEW_REQUIRED`
-5. Show the source context and AI rationale to the reviewer
-6. Approve or reject one proposal at a time
-7. Publish only approved proposals through a separate procedure
-8. Preserve decision and publication history
-9. Present governed records separately from unresolved drafts
+1. Create or link an AI Initiative to an Assessment Run.
+2. Upload TXT or PDF evidence.
+3. Retain the original file in a Snowflake stage and parse PDF content with Cortex document intelligence.
+4. Generate exactly four Decision Pack drafts: Governance, Value, Model Routing, and Portfolio.
+5. Validate the output structure, priority, and source evidence IDs.
+6. Let a person inspect, edit, approve, or reject each section.
+7. Publish only approved sections after explicit confirmation.
+8. Preserve Governed Decision Records and approval/publication history.
+9. Present initiative-level recommendations in a portfolio view.
+
+The existing Gap, Risk, and Action governance workflow remains available and unchanged in behavior.
 
 ## Application Screenshots
 
@@ -38,7 +42,7 @@ ReadinessOps separates analysis from authority:
 
 ![Governance review summary](../assets/screenshots/app_ss_01.png)
 
-### Natural-Language AI Review Setup
+### Evidence-Grounded AI Review
 
 ![Natural-language AI review setup](../assets/screenshots/app_ss_02.png)
 
@@ -52,107 +56,88 @@ ReadinessOps separates analysis from authority:
 
 | Aspect | Implementation |
 |---|---|
-| Snowflake-native workflow | Data, inference, procedures, Streamlit, and history remain in Snowflake |
-| Cortex integration | `SNOWFLAKE.CORTEX.COMPLETE('mistral-large2', ...)` |
-| Structured output | JSON arrays for `gaps`, `risks`, and `actions` |
-| Defensive parsing | Fence stripping, `TRY_PARSE_JSON`, safe casts, and priority normalization |
+| Snowflake-native workflow | Data, stages, parsing, inference, procedures, Streamlit, views, and history remain in Snowflake |
+| Cortex generation | `SNOWFLAKE.CORTEX.COMPLETE('mistral-large2', ...)` |
+| PDF intelligence | `AI_PARSE_DOCUMENT` extracts PDF evidence text |
+| Original-file retention | TXT and PDF files stored in `READINESSOPS_EVIDENCE_STAGE` |
+| Strict structured output | Exactly four required Decision Pack objects with field and type validation |
+| Evidence grounding | Every section must cite non-empty evidence IDs belonging to the selected Run |
 | Proposal isolation | Every AI result begins as `REVIEW_REQUIRED` |
-| Human decision | `SP_REVIEW_AGENT_PROPOSAL` with actor, time, state, and comment |
+| Human decision | Per-section edit, approval/rejection, actor, time, and comment |
 | Controlled publication | `SP_PUBLISH_AGENT_RUN` publishes only approved proposals |
-| Traceability | Proposal source rows connect to Question, Answer, Evidence, Rule Context, and Agent Run |
-| Idempotency | Duplicate governed writes and duplicate publication history are prevented |
-| Runtime compatibility | Tested Streamlit fallbacks, native boolean parameters, and one-based tables |
-| Read-only final validation | Procedure, traceability, state, audit, duplicate, and production-object checks |
+| Idempotency | Duplicate canonical writes and publication history are prevented |
+| Portfolio | `V_AI_PORTFOLIO` summarizes initiative governance, value, recommendation, and priority |
+| Runtime | Streamlit pinned to `1.35.0`; deployment uploads all required source files |
 
 ### Real-World Relevance — 30%
 
 - **Users:** CCoE teams, AI governance leads, risk managers, program owners, internal audit, and executive sponsors
 - **Decision boundary:** AI proposes; accountable people decide
-- **Operational value:** Assessment history supports repeated governance reviews rather than a one-time report
-- **Evidence value:** Every proposal is inspectable before approval
-- **Integration value:** Published Snowflake records can feed BI, Cortex, reporting, and downstream agents
-- **Governance value:** Approval and publication are distinct authorities
-- **Adaptability:** The lifecycle can be repeated across domains and Assessment Runs
+- **Evidence value:** Original artifacts, extracted text, hashes, and source links remain inspectable
+- **Investment value:** Governance, value, routing, and portfolio implications are reviewed together
+- **Operational value:** Approved decisions become governed records rather than disconnected reports
+- **Portfolio value:** Initiatives can be compared by stage, risk posture, expected value, and recommendation
+- **Integration value:** Snowflake records can feed BI, reporting, and downstream governed workflows
 
 ### Completeness — 30%
 
 | Component | Status |
 |---|---|
-| Assessment context | Complete for the demonstration model |
-| Natural-language priority input | Complete |
-| Governance Agent Run | Complete |
-| Gap, Risk, and Action drafts | Complete |
-| Proposal-source traceability | Complete |
-| Human approval and rejection | Complete |
-| Controlled publication | Complete |
-| Decision and publication history | Complete |
-| Governed-record workspace | Complete |
-| Issue-based review UX | Complete |
-| Production deployment and rollback scripts | Complete |
-| Read-only final validation | Complete |
-| Documentation and four-minute demo | Complete |
+| AI Initiative model and Assessment link | Complete |
+| TXT evidence upload | Complete |
+| PDF upload and Cortex parsing | Complete |
+| Original-file stage retention | Complete |
+| Four-section Decision Pack | Complete |
+| Strict schema and evidence-ID validation | Complete |
+| Human edit, approval, and rejection | Complete |
+| Explicit controlled publication | Complete |
+| Governed Decision Records | Complete |
+| Portfolio workspace | Complete |
+| Audit history | Complete |
+| Legacy Gap/Risk/Action preservation | Complete |
+| Production Streamlit deployment | Complete |
+| Isolated E2E validation | Complete |
 
 ## Technical Control Boundary
 
 ```text
-Requirement / Rule Context
-        ↓
-AI Proposed
-        ↓
-Human Approved
-        ↓
-Explicitly Published
+Evidence Supplied
+→ AI Drafted
+→ Human Reviewed
+→ Explicitly Published
+→ Governed Record
 ```
 
-The AI cannot approve its own proposal and cannot invoke publication through the UI without a human-approved state.
+The AI cannot approve its own proposal or bypass the publication confirmation.
 
 ## Verified Results
 
-A completed review generated:
-
-| Proposal type | Count |
-|---|---:|
-| Gap | 5 |
-| Risk | 2 |
-| Action | 5 |
-| Total drafts | 12 |
-
-Verified lifecycle behavior:
+The isolated `RUN_FINALIST_E2E_001` test confirmed:
 
 | Test | Result |
 |---|---|
-| Gap approval and publication | Passed |
-| Risk rejection without publication | Passed |
-| Action approval and publication | Passed |
-| Separate approval and publication events | Passed |
+| TXT evidence upload and stage retention | Passed |
+| PDF upload, stage retention, and parsing | Passed |
+| Exactly four Decision Pack sections | Passed |
+| Four human approvals | Passed |
+| Four explicit publications | Passed |
+| Eight approval/publication audit events | Passed |
+| Four Governed Decision Records | Passed |
+| Portfolio view | Passed |
+| Evidence citation validation | Passed |
 | Duplicate publication prevention | Passed |
-| Source Proposal and Agent Run traceability | Passed |
-| One-based visible list numbering | Passed |
-| Empty publication-state navigation | Passed |
+| Proposal leakage into `RUN_001` | 0 |
+| Existing `RUN_001` retained | Passed |
 | Production dashboard deployment | Passed |
-| Git `main` synchronization | Passed |
 
-## Canonical Risk Constraint
+## Safety and Compatibility
 
-Risk is reviewed as a first-class proposal. Because the demonstration schema has no dedicated Risk table, an approved Risk is published to `READINESS_GAPS` with a `[RISK]` prefix and remains identifiable through its source proposal. This limitation is explicit in the Architecture and README.
+The finalist migration extends the existing publication procedure only for `DECISION_*` proposal types. Existing Gap, Risk, and Action mappings and audit deduplication remain functionally unchanged. The E2E test used a dedicated Run and did not modify `RUN_001`.
 
 ## Built With CoCo CLI
 
-The implementation workflow included:
-
-1. Live Snowflake schema inspection
-2. SQL procedure development
-3. Cortex output testing
-4. Runtime failure diagnosis
-5. Read-only validation
-6. Streamlit deployment
-7. End-to-end governance testing
-8. Git and documentation synchronization
+The implementation workflow included live Snowflake inspection, SQL and Streamlit development, Cortex output testing, runtime diagnosis, isolated E2E validation, production deployment, Git review, and documentation synchronization.
 
 ## Why It Matters
 
-ReadinessOps demonstrates that AI governance should not stop at diagnosis and should not allow generated output to silently become truth. It operationalizes the accountable path from evidence to action while keeping publication authority with people.
-
-## Relationship to SOLIFAN CCoE Readiness Studio
-
-ReadinessOps is the governed-agent workflow for the broader SOLIFAN CCoE Readiness Studio concept: an Enterprise AI Governance operating platform that tracks readiness over time and connects evidence, gaps, risks, decisions, and actions.
+ReadinessOps turns enterprise AI governance from a periodic assessment into an operating control plane. It makes evidence, value, model routing, human accountability, publication authority, portfolio context, and audit history part of one Snowflake-native workflow.
