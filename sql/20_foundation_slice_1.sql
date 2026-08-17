@@ -313,7 +313,167 @@ BEGIN
         '- Ground every recommendation in supplied evidence and assessment answers.';
 
     -- Call LLM
-    v_llm_response := (SELECT SNOWFLAKE.CORTEX.COMPLETE('mistral-large2', :v_prompt));
+    -- Strict JSON v2: schema-constrained Decision Pack output
+    v_llm_response := (
+        SELECT TO_JSON(
+            AI_COMPLETE(
+                model => 'mistral-large2',
+                prompt => :v_prompt,
+                model_parameters => {
+                    'temperature': 0,
+                    'max_tokens': 4096
+                },
+                response_format => {
+                    'type': 'json',
+                    'schema': {
+                        'type': 'object',
+                        'properties': {
+                            'governance_summary': {
+                                'type': 'object',
+                                'properties': {
+                                    'title': {'type': 'string'},
+                                    'description': {'type': 'string'},
+                                    'readiness_level': {
+                                        'type': 'string',
+                                        'enum': ['RED', 'AMBER', 'GREEN']
+                                    },
+                                    'key_findings': {
+                                        'type': 'array',
+                                        'items': {'type': 'string'}
+                                    },
+                                    'recommendations': {
+                                        'type': 'array',
+                                        'items': {'type': 'string'}
+                                    },
+                                    'source_evidence_ids': {
+                                        'type': 'array',
+                                        'items': {'type': 'string'}
+                                    }
+                                },
+                                'required': [
+                                    'title',
+                                    'description',
+                                    'readiness_level',
+                                    'key_findings',
+                                    'recommendations',
+                                    'source_evidence_ids'
+                                ],
+                                'additionalProperties': false
+                            },
+                            'value_realization': {
+                                'type': 'object',
+                                'properties': {
+                                    'title': {'type': 'string'},
+                                    'description': {'type': 'string'},
+                                    'expected_value': {'type': 'string'},
+                                    'realization_confidence': {
+                                        'type': 'string',
+                                        'enum': ['HIGH', 'MEDIUM', 'LOW']
+                                    },
+                                    'blockers': {
+                                        'type': 'array',
+                                        'items': {'type': 'string'}
+                                    },
+                                    'enablers': {
+                                        'type': 'array',
+                                        'items': {'type': 'string'}
+                                    },
+                                    'source_evidence_ids': {
+                                        'type': 'array',
+                                        'items': {'type': 'string'}
+                                    }
+                                },
+                                'required': [
+                                    'title',
+                                    'description',
+                                    'expected_value',
+                                    'realization_confidence',
+                                    'blockers',
+                                    'enablers',
+                                    'source_evidence_ids'
+                                ],
+                                'additionalProperties': false
+                            },
+                            'model_routing': {
+                                'type': 'object',
+                                'properties': {
+                                    'title': {'type': 'string'},
+                                    'description': {'type': 'string'},
+                                    'recommended_approach': {'type': 'string'},
+                                    'complexity_level': {
+                                        'type': 'string',
+                                        'enum': ['HIGH', 'MEDIUM', 'LOW']
+                                    },
+                                    'data_readiness': {
+                                        'type': 'string',
+                                        'enum': ['HIGH', 'MEDIUM', 'LOW']
+                                    },
+                                    'considerations': {
+                                        'type': 'array',
+                                        'items': {'type': 'string'}
+                                    },
+                                    'source_evidence_ids': {
+                                        'type': 'array',
+                                        'items': {'type': 'string'}
+                                    }
+                                },
+                                'required': [
+                                    'title',
+                                    'description',
+                                    'recommended_approach',
+                                    'complexity_level',
+                                    'data_readiness',
+                                    'considerations',
+                                    'source_evidence_ids'
+                                ],
+                                'additionalProperties': false
+                            },
+                            'portfolio_recommendation': {
+                                'type': 'object',
+                                'properties': {
+                                    'title': {'type': 'string'},
+                                    'description': {'type': 'string'},
+                                    'recommendation': {
+                                        'type': 'string',
+                                        'enum': ['PROCEED', 'HOLD', 'REDESIGN', 'RETIRE']
+                                    },
+                                    'priority_score': {'type': 'integer'},
+                                    'rationale': {'type': 'string'},
+                                    'next_review': {'type': 'string'},
+                                    'next_steps': {
+                                        'type': 'array',
+                                        'items': {'type': 'string'}
+                                    },
+                                    'source_evidence_ids': {
+                                        'type': 'array',
+                                        'items': {'type': 'string'}
+                                    }
+                                },
+                                'required': [
+                                    'title',
+                                    'description',
+                                    'recommendation',
+                                    'priority_score',
+                                    'rationale',
+                                    'next_review',
+                                    'next_steps',
+                                    'source_evidence_ids'
+                                ],
+                                'additionalProperties': false
+                            }
+                        },
+                        'required': [
+                            'governance_summary',
+                            'value_realization',
+                            'model_routing',
+                            'portfolio_recommendation'
+                        ],
+                        'additionalProperties': false
+                    }
+                }
+            )
+        )
+    );
 
     -- Clean markdown fences
     v_llm_response := REGEXP_REPLACE(:v_llm_response, '^\\s*```(json|JSON)?\\s*', '');
