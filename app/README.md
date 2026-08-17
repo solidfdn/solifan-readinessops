@@ -33,7 +33,7 @@ Assessment + Evidence
 
 - **Initiative:** create or link an AI Initiative to the selected Assessment Run
 - **Evidence:** upload TXT or PDF files, validate content, hash it, retain originals in `READINESSOPS_EVIDENCE_STAGE`, and parse PDFs with `AI_PARSE_DOCUMENT`
-- **Decision Pack:** generate exactly four evidence-grounded drafts; inspect structured detail; edit, approve, or reject each section; explicitly publish approved sections
+- **Decision Pack:** generate exactly four evidence-grounded drafts; inspect the five-step Agent execution trace and structured detail; edit, approve, or reject each section; explicitly publish approved sections
 - **Published:** inspect Governed Decision Records for Governance, Value, Model Routing, and Portfolio
 - **Portfolio:** compare initiative stage, owner, governance state, value assessment, recommendation, and priority
 

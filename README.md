@@ -29,6 +29,7 @@ The finalist build adds five connected workspaces:
 4. **Published** — inspect only human-approved, explicitly published Governed Decision Records
 5. **Portfolio** — compare initiatives by stage, governance status, value assessment, recommendation, and priority
 
+The Decision Pack workspace also exposes a governed five-step execution trace.
 Human decisions and publication events remain visible in the existing **Audit trail** workspace.
 
 ## Control Boundary
@@ -110,6 +111,7 @@ See [docs/architecture.md](docs/architecture.md) for the detailed design.
 | `EVIDENCE_ITEMS` | Validated evidence text, hashes, source metadata, parser metadata, and stage path |
 | `READINESSOPS_EVIDENCE_STAGE` | Retains original TXT and PDF files |
 | `GOVERNANCE_AGENT_RUN` | Review execution, model, instruction, status, timestamps, fingerprint, and summary |
+| `GOVERNANCE_AGENT_RUN_STEP` | Ordered execution steps, status, timing, safe summaries, and errors for each Decision Pack run |
 | `GOVERNANCE_AGENT_PROPOSAL` | Legacy and Decision Pack drafts with review and publication states |
 | `GOVERNANCE_AGENT_PROPOSAL_SOURCE` | Proposal-to-evidence traceability |
 | `GOVERNANCE_APPROVAL_HISTORY` | Approval, rejection, and publication events |
@@ -123,10 +125,11 @@ See [docs/architecture.md](docs/architecture.md) for the detailed design.
 
 | Feature | Usage |
 |---|---|
-| Snowflake Cortex AI | `SNOWFLAKE.CORTEX.COMPLETE()` for Decision Pack generation |
+| Snowflake Cortex AI | `AI_COMPLETE()` with a strict JSON response schema for Decision Pack generation |
 | Cortex document intelligence | `AI_PARSE_DOCUMENT` for PDF evidence extraction |
 | Streamlit in Snowflake | Initiative, evidence, review, publication, portfolio, and audit workspaces |
 | SQL Scripting | Validation, state transitions, controlled writes, and exception handling |
+| Governed execution trace | Five persisted run steps without additional model calls |
 | Semi-structured data | `VARIANT`, `FLATTEN`, `TRY_PARSE_JSON`, and strict output-contract checks |
 | Internal stages | Original-file retention for uploaded evidence |
 | Snowflake identity and timestamps | Reviewer, uploader, and publisher attribution |

@@ -6,6 +6,7 @@
 --
 -- ROLLBACK GUIDANCE (do NOT run unless reverting this slice):
 --   DROP TABLE IF EXISTS GOVERNED_DECISION_RECORD;
+--   DROP TABLE IF EXISTS GOVERNANCE_AGENT_RUN_STEP;
 --   DROP TABLE IF EXISTS AI_INITIATIVE;
 --   DROP VIEW IF EXISTS V_AI_PORTFOLIO;
 --   DROP PROCEDURE IF EXISTS SP_GENERATE_DECISION_PACK(VARCHAR, VARCHAR);
@@ -80,6 +81,24 @@ CREATE TABLE IF NOT EXISTS GOVERNED_DECISION_RECORD (
 );
 
 -- ============================================================
+-- D.1 GOVERNANCE_AGENT_RUN_STEP: observable agent execution
+-- ============================================================
+CREATE TABLE IF NOT EXISTS GOVERNANCE_AGENT_RUN_STEP (
+    AGENT_RUN_STEP_ID      VARCHAR(16777216) NOT NULL,
+    AGENT_RUN_ID           VARCHAR(16777216) NOT NULL,
+    STEP_SEQUENCE          NUMBER(38,0) NOT NULL,
+    STEP_CODE              VARCHAR(100) NOT NULL,
+    STEP_NAME              VARCHAR(500) NOT NULL,
+    STATUS                 VARCHAR(50) NOT NULL,
+    STARTED_AT             TIMESTAMP_NTZ(9) NOT NULL,
+    COMPLETED_AT           TIMESTAMP_NTZ(9),
+    DURATION_MS            NUMBER(38,0),
+    STEP_DETAIL            VARIANT,
+    ERROR_MESSAGE          VARCHAR(16777216),
+    CREATED_AT             TIMESTAMP_NTZ(9) DEFAULT CURRENT_TIMESTAMP()
+);
+
+-- ============================================================
 -- E. SP_GENERATE_DECISION_PACK
 -- ============================================================
 CREATE OR REPLACE PROCEDURE SP_GENERATE_DECISION_PACK(
@@ -118,6 +137,7 @@ BEGIN
     LET v_port_ids ARRAY;
     LET v_invalid_source_count INTEGER := 0;
     LET v_port_priority NUMBER;
+    LET v_source_link_count INTEGER := 0;
 
     -- Validate assessment run
     v_run_exists := (SELECT COUNT(*) FROM ASSESSMENT_RUNS WHERE RUN_ID = :P_ASSESSMENT_RUN_ID);
@@ -217,6 +237,32 @@ BEGIN
         'RUNNING', 'mistral-large2', :v_prompt_version, :v_input_fingerprint
     );
 
+    -- Step 1 records the validated, fingerprinted input boundary.
+    INSERT INTO GOVERNANCE_AGENT_RUN_STEP (
+        AGENT_RUN_STEP_ID, AGENT_RUN_ID, STEP_SEQUENCE, STEP_CODE,
+        STEP_NAME, STATUS, STARTED_AT, COMPLETED_AT, DURATION_MS, STEP_DETAIL
+    )
+    SELECT
+        :v_agent_run_id || '_STEP_01', :v_agent_run_id, 1,
+        'INPUT_VALIDATION', 'Validate governed inputs', 'COMPLETED',
+        CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP(), 0,
+        OBJECT_CONSTRUCT(
+            'assessment_run_id', :P_ASSESSMENT_RUN_ID,
+            'initiative_id', :v_initiative_id,
+            'evidence_count', :v_evidence_count,
+            'input_fingerprint', :v_input_fingerprint
+        );
+
+    -- Step 2 covers deterministic context and prompt assembly.
+    INSERT INTO GOVERNANCE_AGENT_RUN_STEP (
+        AGENT_RUN_STEP_ID, AGENT_RUN_ID, STEP_SEQUENCE, STEP_CODE,
+        STEP_NAME, STATUS, STARTED_AT
+    )
+    SELECT
+        :v_agent_run_id || '_STEP_02', :v_agent_run_id, 2,
+        'CONTEXT_ASSEMBLY', 'Assemble assessment and evidence context',
+        'RUNNING', CURRENT_TIMESTAMP();
+
     -- Build evidence block
     v_evidence_block := (
         SELECT LISTAGG(
@@ -303,6 +349,28 @@ BEGIN
         '- priority_score must be one integer from 1 through 100.\n' ||
         '- Do not invent evidence IDs.\n' ||
         '- Ground every recommendation in supplied evidence and assessment answers.';
+
+    UPDATE GOVERNANCE_AGENT_RUN_STEP
+    SET STATUS = 'COMPLETED', COMPLETED_AT = CURRENT_TIMESTAMP(),
+        DURATION_MS = DATEDIFF('millisecond', STARTED_AT, CURRENT_TIMESTAMP()),
+        STEP_DETAIL = OBJECT_CONSTRUCT(
+            'assessment_context_chars', LENGTH(COALESCE(:v_assessment_block, '')),
+            'evidence_context_chars', LENGTH(COALESCE(:v_evidence_block, '')),
+            'prompt_chars', LENGTH(COALESCE(:v_prompt, ''))
+        )
+    WHERE AGENT_RUN_STEP_ID = :v_agent_run_id || '_STEP_02';
+
+    -- Step 3 is the only model inference call. Run-step observability does not
+    -- increase the number of Cortex calls or inference cost.
+    INSERT INTO GOVERNANCE_AGENT_RUN_STEP (
+        AGENT_RUN_STEP_ID, AGENT_RUN_ID, STEP_SEQUENCE, STEP_CODE,
+        STEP_NAME, STATUS, STARTED_AT, STEP_DETAIL
+    )
+    SELECT
+        :v_agent_run_id || '_STEP_03', :v_agent_run_id, 3,
+        'CORTEX_GENERATION', 'Generate four-section Decision Pack',
+        'RUNNING', CURRENT_TIMESTAMP(),
+        OBJECT_CONSTRUCT('model', 'mistral-large2', 'prompt_version', :v_prompt_version);
 
     -- Call LLM
     -- Strict JSON v2: schema-constrained Decision Pack output
@@ -467,6 +535,26 @@ BEGIN
         )
     );
 
+    UPDATE GOVERNANCE_AGENT_RUN_STEP
+    SET STATUS = 'COMPLETED', COMPLETED_AT = CURRENT_TIMESTAMP(),
+        DURATION_MS = DATEDIFF('millisecond', STARTED_AT, CURRENT_TIMESTAMP()),
+        STEP_DETAIL = OBJECT_CONSTRUCT(
+            'model', 'mistral-large2',
+            'prompt_version', :v_prompt_version,
+            'response_chars', LENGTH(COALESCE(:v_llm_response, ''))
+        )
+    WHERE AGENT_RUN_STEP_ID = :v_agent_run_id || '_STEP_03';
+
+    -- Step 4 validates schema, enums, priority, and evidence citations.
+    INSERT INTO GOVERNANCE_AGENT_RUN_STEP (
+        AGENT_RUN_STEP_ID, AGENT_RUN_ID, STEP_SEQUENCE, STEP_CODE,
+        STEP_NAME, STATUS, STARTED_AT
+    )
+    SELECT
+        :v_agent_run_id || '_STEP_04', :v_agent_run_id, 4,
+        'OUTPUT_VALIDATION', 'Validate schema and evidence grounding',
+        'RUNNING', CURRENT_TIMESTAMP();
+
     -- Clean markdown fences
     v_llm_response := REGEXP_REPLACE(:v_llm_response, '^\\s*```(json|JSON)?\\s*', '');
     v_llm_response := REGEXP_REPLACE(:v_llm_response, '\\s*```\\s*$', '');
@@ -475,6 +563,11 @@ BEGIN
     -- Parse JSON
     v_parsed := (SELECT TRY_PARSE_JSON(:v_llm_response));
     IF (:v_parsed IS NULL) THEN
+        UPDATE GOVERNANCE_AGENT_RUN_STEP
+        SET STATUS = 'FAILED', COMPLETED_AT = CURRENT_TIMESTAMP(),
+            DURATION_MS = DATEDIFF('millisecond', STARTED_AT, CURRENT_TIMESTAMP()),
+            ERROR_MESSAGE = 'Invalid JSON from Cortex'
+        WHERE AGENT_RUN_STEP_ID = :v_agent_run_id || '_STEP_04';
         UPDATE GOVERNANCE_AGENT_RUN
         SET STATUS = 'FAILED', COMPLETED_AT = CURRENT_TIMESTAMP(),
             ERROR_MESSAGE = 'Invalid JSON response: ' || LEFT(COALESCE(:v_llm_response, 'NULL'), 500)
@@ -494,6 +587,11 @@ BEGIN
         NOT :v_gov_valid OR NOT :v_val_valid OR
         NOT :v_route_valid OR NOT :v_port_valid
     ) THEN
+        UPDATE GOVERNANCE_AGENT_RUN_STEP
+        SET STATUS = 'FAILED', COMPLETED_AT = CURRENT_TIMESTAMP(),
+            DURATION_MS = DATEDIFF('millisecond', STARTED_AT, CURRENT_TIMESTAMP()),
+            ERROR_MESSAGE = 'Incomplete four-section Decision Pack'
+        WHERE AGENT_RUN_STEP_ID = :v_agent_run_id || '_STEP_04';
         UPDATE GOVERNANCE_AGENT_RUN
         SET STATUS = 'FAILED', COMPLETED_AT = CURRENT_TIMESTAMP(),
             ERROR_MESSAGE = 'Incomplete Decision Pack: governance=' || :v_gov_valid || ' value=' || :v_val_valid || ' routing=' || :v_route_valid || ' portfolio=' || :v_port_valid
@@ -516,6 +614,11 @@ BEGIN
         NULLIF(TRIM(:v_parsed:portfolio_recommendation:description::VARCHAR), '') IS NULL OR
         COALESCE(UPPER(:v_parsed:portfolio_recommendation:recommendation::VARCHAR), '') NOT IN ('PROCEED', 'HOLD', 'REDESIGN', 'RETIRE')
     ) THEN
+        UPDATE GOVERNANCE_AGENT_RUN_STEP
+        SET STATUS = 'FAILED', COMPLETED_AT = CURRENT_TIMESTAMP(),
+            DURATION_MS = DATEDIFF('millisecond', STARTED_AT, CURRENT_TIMESTAMP()),
+            ERROR_MESSAGE = 'Required field or enum validation failed'
+        WHERE AGENT_RUN_STEP_ID = :v_agent_run_id || '_STEP_04';
         UPDATE GOVERNANCE_AGENT_RUN
         SET STATUS = 'FAILED', COMPLETED_AT = CURRENT_TIMESTAMP(),
             ERROR_MESSAGE = 'Decision Pack failed required field or enum validation'
@@ -530,6 +633,11 @@ BEGIN
         TYPEOF(:v_parsed:model_routing:source_evidence_ids) != 'ARRAY' OR
         TYPEOF(:v_parsed:portfolio_recommendation:source_evidence_ids) != 'ARRAY'
     ) THEN
+        UPDATE GOVERNANCE_AGENT_RUN_STEP
+        SET STATUS = 'FAILED', COMPLETED_AT = CURRENT_TIMESTAMP(),
+            DURATION_MS = DATEDIFF('millisecond', STARTED_AT, CURRENT_TIMESTAMP()),
+            ERROR_MESSAGE = 'source_evidence_ids must be arrays'
+        WHERE AGENT_RUN_STEP_ID = :v_agent_run_id || '_STEP_04';
         UPDATE GOVERNANCE_AGENT_RUN
         SET STATUS = 'FAILED', COMPLETED_AT = CURRENT_TIMESTAMP(),
             ERROR_MESSAGE = 'Each Decision Pack section requires a source_evidence_ids array'
@@ -546,6 +654,11 @@ BEGIN
         ARRAY_SIZE(:v_gov_ids) = 0 OR ARRAY_SIZE(:v_val_ids) = 0 OR
         ARRAY_SIZE(:v_route_ids) = 0 OR ARRAY_SIZE(:v_port_ids) = 0
     ) THEN
+        UPDATE GOVERNANCE_AGENT_RUN_STEP
+        SET STATUS = 'FAILED', COMPLETED_AT = CURRENT_TIMESTAMP(),
+            DURATION_MS = DATEDIFF('millisecond', STARTED_AT, CURRENT_TIMESTAMP()),
+            ERROR_MESSAGE = 'Every section must cite evidence'
+        WHERE AGENT_RUN_STEP_ID = :v_agent_run_id || '_STEP_04';
         UPDATE GOVERNANCE_AGENT_RUN
         SET STATUS = 'FAILED', COMPLETED_AT = CURRENT_TIMESTAMP(),
             ERROR_MESSAGE = 'Every Decision Pack section must cite at least one evidence item'
@@ -571,6 +684,11 @@ BEGIN
     );
 
     IF (:v_invalid_source_count > 0) THEN
+        UPDATE GOVERNANCE_AGENT_RUN_STEP
+        SET STATUS = 'FAILED', COMPLETED_AT = CURRENT_TIMESTAMP(),
+            DURATION_MS = DATEDIFF('millisecond', STARTED_AT, CURRENT_TIMESTAMP()),
+            ERROR_MESSAGE = 'Evidence citation is outside the selected Assessment Run'
+        WHERE AGENT_RUN_STEP_ID = :v_agent_run_id || '_STEP_04';
         UPDATE GOVERNANCE_AGENT_RUN
         SET STATUS = 'FAILED', COMPLETED_AT = CURRENT_TIMESTAMP(),
             ERROR_MESSAGE = 'Decision Pack cited evidence outside the selected Assessment Run'
@@ -583,12 +701,40 @@ BEGIN
         :v_port_priority IS NULL OR :v_port_priority < 1 OR :v_port_priority > 100 OR
         MOD(:v_port_priority, 1) != 0
     ) THEN
+        UPDATE GOVERNANCE_AGENT_RUN_STEP
+        SET STATUS = 'FAILED', COMPLETED_AT = CURRENT_TIMESTAMP(),
+            DURATION_MS = DATEDIFF('millisecond', STARTED_AT, CURRENT_TIMESTAMP()),
+            ERROR_MESSAGE = 'Portfolio priority must be an integer from 1 through 100'
+        WHERE AGENT_RUN_STEP_ID = :v_agent_run_id || '_STEP_04';
         UPDATE GOVERNANCE_AGENT_RUN
         SET STATUS = 'FAILED', COMPLETED_AT = CURRENT_TIMESTAMP(),
             ERROR_MESSAGE = 'portfolio_recommendation.priority_score must be an integer from 1 through 100'
         WHERE AGENT_RUN_ID = :v_agent_run_id;
         RETURN '{"status":"FAILED","agent_run_id":"' || :v_agent_run_id || '","error":"Invalid priority_score"}';
     END IF;
+
+    UPDATE GOVERNANCE_AGENT_RUN_STEP
+    SET STATUS = 'COMPLETED', COMPLETED_AT = CURRENT_TIMESTAMP(),
+        DURATION_MS = DATEDIFF('millisecond', STARTED_AT, CURRENT_TIMESTAMP()),
+        STEP_DETAIL = OBJECT_CONSTRUCT(
+            'section_count', 4,
+            'evidence_citation_count',
+                ARRAY_SIZE(:v_gov_ids) + ARRAY_SIZE(:v_val_ids) +
+                ARRAY_SIZE(:v_route_ids) + ARRAY_SIZE(:v_port_ids),
+            'invalid_evidence_citations', :v_invalid_source_count,
+            'portfolio_priority', :v_port_priority
+        )
+    WHERE AGENT_RUN_STEP_ID = :v_agent_run_id || '_STEP_04';
+
+    -- Step 5 atomically persists proposals, evidence links, and run status.
+    INSERT INTO GOVERNANCE_AGENT_RUN_STEP (
+        AGENT_RUN_STEP_ID, AGENT_RUN_ID, STEP_SEQUENCE, STEP_CODE,
+        STEP_NAME, STATUS, STARTED_AT
+    )
+    SELECT
+        :v_agent_run_id || '_STEP_05', :v_agent_run_id, 5,
+        'DRAFT_PERSISTENCE', 'Persist governed AI drafts and source links',
+        'RUNNING', CURRENT_TIMESTAMP();
 
     -- Insert four proposals atomically
     BEGIN TRANSACTION;
@@ -695,6 +841,23 @@ BEGIN
       ON e.RUN_ID = :P_ASSESSMENT_RUN_ID
      AND e.EVIDENCE_ID = cited.EVIDENCE_ID;
 
+    v_source_link_count := (
+        SELECT COUNT(*)
+        FROM GOVERNANCE_AGENT_PROPOSAL_SOURCE s
+        JOIN GOVERNANCE_AGENT_PROPOSAL p
+          ON p.PROPOSAL_ID = s.PROPOSAL_ID
+        WHERE p.AGENT_RUN_ID = :v_agent_run_id
+    );
+
+    UPDATE GOVERNANCE_AGENT_RUN_STEP
+    SET STATUS = 'COMPLETED', COMPLETED_AT = CURRENT_TIMESTAMP(),
+        DURATION_MS = DATEDIFF('millisecond', STARTED_AT, CURRENT_TIMESTAMP()),
+        STEP_DETAIL = OBJECT_CONSTRUCT(
+            'proposal_count', 4,
+            'source_link_count', :v_source_link_count
+        )
+    WHERE AGENT_RUN_STEP_ID = :v_agent_run_id || '_STEP_05';
+
     -- Mark completed inside the same transaction as proposals and citations.
     UPDATE GOVERNANCE_AGENT_RUN
     SET STATUS = 'COMPLETED', COMPLETED_AT = CURRENT_TIMESTAMP(),
@@ -703,11 +866,17 @@ BEGIN
 
     COMMIT;
 
-    RETURN '{"status":"COMPLETED","agent_run_id":"' || :v_agent_run_id || '","sections":4}';
+    RETURN '{"status":"COMPLETED","agent_run_id":"' || :v_agent_run_id || '","sections":4,"run_steps":5}';
 
 EXCEPTION
     WHEN OTHER THEN
         ROLLBACK;
+        UPDATE GOVERNANCE_AGENT_RUN_STEP
+        SET STATUS = 'FAILED', COMPLETED_AT = CURRENT_TIMESTAMP(),
+            DURATION_MS = DATEDIFF('millisecond', STARTED_AT, CURRENT_TIMESTAMP()),
+            ERROR_MESSAGE = LEFT(:SQLERRM, 500)
+        WHERE AGENT_RUN_ID = :v_agent_run_id
+          AND STATUS = 'RUNNING';
         UPDATE GOVERNANCE_AGENT_RUN
         SET STATUS = 'FAILED', COMPLETED_AT = CURRENT_TIMESTAMP(),
             ERROR_MESSAGE = LEFT(:SQLERRM, 500)

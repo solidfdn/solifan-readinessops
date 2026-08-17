@@ -10,6 +10,9 @@ AI Initiative
                     ▼
           Cortex Decision Pack Generation
                     │
+                    ├─ GOVERNANCE_AGENT_RUN_STEP
+                    │  5 governed execution steps
+                    │
                     ▼
        Four REVIEW_REQUIRED Proposals
        GOVERNANCE / VALUE / ROUTING / PORTFOLIO
@@ -57,6 +60,12 @@ TXT and PDF originals are retained in `READINESSOPS_EVIDENCE_STAGE`. `EVIDENCE_I
 - Portfolio
 
 Each section requires a valid priority and non-empty evidence IDs belonging to the selected Assessment Run.
+
+## Governed Agent Execution
+
+`GOVERNANCE_AGENT_RUN_STEP` records input validation, context assembly, Cortex
+generation, output validation, and draft persistence. The trace stores status,
+timing, safe summaries, and errors without adding model calls.
 
 ## Compatibility
 

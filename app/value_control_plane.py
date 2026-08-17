@@ -359,6 +359,102 @@ def _render_generate_dp(session, run_id):
         _rerun()
 
 
+def _render_agent_execution_trace(session, run_id):
+    st.subheader("Agent execution trace")
+    st.caption(
+        "Governed Snowflake steps recorded for the latest Decision Pack run. "
+        "The trace adds observability without adding Cortex inference calls."
+    )
+
+    try:
+        run_df = _query(
+            session,
+            "SELECT AGENT_RUN_ID,STATUS,MODEL_NAME,PROMPT_VERSION,STARTED_AT,"
+            "COMPLETED_AT,ERROR_MESSAGE FROM GOVERNANCE_AGENT_RUN "
+            "WHERE ASSESSMENT_RUN_ID = ? AND WORKFLOW_TYPE = 'DECISION_PACK' "
+            "ORDER BY CREATED_AT DESC LIMIT 1",
+            [run_id],
+        )
+    except Exception as exc:
+        st.warning(f"Execution trace is not available: {exc}")
+        return
+
+    if run_df.empty:
+        st.info("Generate a Decision Pack to record its governed execution trace.")
+        return
+
+    run = run_df.iloc[0]
+    agent_run_id = _text(run["AGENT_RUN_ID"])
+    run_status = _text(run["STATUS"])
+    status_tone = {
+        "COMPLETED": "success", "RUNNING": "info", "FAILED": "danger"
+    }.get(run_status, "neutral")
+
+    st.markdown(
+        f"{_badge(run_status, status_tone)} "
+        f"<b>{_escaped(agent_run_id)}</b>",
+        unsafe_allow_html=True,
+    )
+    st.caption(
+        f"Model: {_text(run.get('MODEL_NAME'))} · "
+        f"Prompt: {_text(run.get('PROMPT_VERSION'))} · "
+        f"Started: {_timestamp(run.get('STARTED_AT'))} · "
+        f"Completed: {_timestamp(run.get('COMPLETED_AT'))}"
+    )
+
+    try:
+        steps = _query(
+            session,
+            "SELECT STEP_SEQUENCE,STEP_CODE,STEP_NAME,STATUS,STARTED_AT,"
+            "COMPLETED_AT,DURATION_MS,STEP_DETAIL,ERROR_MESSAGE "
+            "FROM GOVERNANCE_AGENT_RUN_STEP WHERE AGENT_RUN_ID = ? "
+            "ORDER BY STEP_SEQUENCE",
+            [agent_run_id],
+        )
+    except Exception as exc:
+        st.warning(f"Run-step records could not be loaded: {exc}")
+        return
+
+    if steps.empty:
+        st.info("This earlier run predates governed run-step recording.")
+        return
+
+    completed_count = _integer((steps["STATUS"].astype(str) == "COMPLETED").sum())
+    total_duration_ms = sum(
+        _integer(value) for value in steps["DURATION_MS"].tolist()
+    )
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Recorded steps", len(steps))
+    m2.metric("Completed", completed_count)
+    m3.metric("Recorded duration", f"{total_duration_ms / 1000:.1f}s")
+
+    with st.expander("Inspect governed run steps", expanded=True):
+        for _, step in steps.iterrows():
+            step_status = _text(step["STATUS"])
+            step_tone = {
+                "COMPLETED": "success", "RUNNING": "info", "FAILED": "danger"
+            }.get(step_status, "neutral")
+            duration_ms = _integer(step.get("DURATION_MS"))
+            st.markdown(
+                f"{_badge(step_status, step_tone)} "
+                f"**{_integer(step['STEP_SEQUENCE'])}. {_escaped(step['STEP_NAME'])}** "
+                f"`{_escaped(step['STEP_CODE'])}`",
+                unsafe_allow_html=True,
+            )
+            timing = (
+                f"Started: {_timestamp(step.get('STARTED_AT'))} · "
+                f"Completed: {_timestamp(step.get('COMPLETED_AT'))}"
+            )
+            if duration_ms:
+                timing += f" · {duration_ms / 1000:.1f}s"
+            st.caption(timing)
+            if _text(step.get("ERROR_MESSAGE"), ""):
+                st.error(_text(step.get("ERROR_MESSAGE")))
+
+    if run_status == "FAILED" and _text(run.get("ERROR_MESSAGE"), ""):
+        st.error(f"Run failed: {_text(run.get('ERROR_MESSAGE'))}")
+
+
 def _render_decision_pack_review(session, run_id):
     st.subheader("Decision Pack sections")
     try:
@@ -604,6 +700,7 @@ def render_value_control_plane(session, assessment_run_id: str, actor: str) -> N
     elif vcp_tab == "Decision Pack":
         if _text(run_row.get("INITIATIVE_ID"), ""):
             _render_generate_dp(session, assessment_run_id)
+            _render_agent_execution_trace(session, assessment_run_id)
             st.divider()
         else:
             st.warning("Link an AI Initiative before generating a Decision Pack.")
