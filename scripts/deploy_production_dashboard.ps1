@@ -94,4 +94,3 @@ Write-Host ""
 Write-Host "Production dashboard updated." -ForegroundColor Green
 Write-Host "Object: $Database.$Schema.$AppName" -ForegroundColor Cyan
 Write-Host "Open the object from Snowsight > Streamlit." -ForegroundColor Yellow
-
