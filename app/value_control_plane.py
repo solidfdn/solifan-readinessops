@@ -6,6 +6,7 @@ Evidence, Draft Decision Pack review, Published Governed Records, AI Portfolio.
 """
 
 import hashlib
+import io
 import json
 from datetime import datetime
 from uuid import uuid4
@@ -209,23 +210,44 @@ def _render_evidence_upload(session, run_id):
                 pass
 
             ev_id = f"EV_TXT_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{sha[:8]}"
+            stage_path = (
+                f"@READINESSOPS_EVIDENCE_STAGE/{run_id}/{ev_id}/{sha}.txt"
+            )
+
+            try:
+                session.file.put_stream(
+                    io.BytesIO(raw),
+                    stage_path,
+                    auto_compress=False,
+                    overwrite=False,
+                )
+            except Exception:
+                st.error(f"**{uf.name}**: Original file storage failed.")
+                continue
+
             _execute(
                 session,
                 "INSERT INTO EVIDENCE_ITEMS (EVIDENCE_ID,RUN_ID,QUESTION_ID,"
                 "EVIDENCE_TITLE,EVIDENCE_TEXT,EVIDENCE_STATUS,"
                 "SOURCE_FILENAME,SOURCE_TYPE,MEDIA_TYPE,"
-                "CONTENT_SHA256,BYTE_COUNT,CHAR_COUNT,UPLOADED_AT,UPLOADED_BY) "
+                "CONTENT_SHA256,BYTE_COUNT,CHAR_COUNT,STAGE_PATH,"
+                "UPLOADED_AT,UPLOADED_BY) "
                 "VALUES (?, ?, NULL, ?, ?, 'VALIDATED', ?, 'UPLOADED_TXT', "
-                "'text/plain', ?, ?, ?, CURRENT_TIMESTAMP(), CURRENT_USER())",
-                [ev_id, run_id, uf.name, content, uf.name, sha, len(raw), len(content)],
+                "'text/plain', ?, ?, ?, ?, CURRENT_TIMESTAMP(), CURRENT_USER())",
+                [
+                    ev_id, run_id, uf.name, content, uf.name, sha,
+                    len(raw), len(content), stage_path,
+                ],
             )
-            st.success(f"**{uf.name}** stored ({len(content):,} chars)")
+            st.success(
+                f"**{uf.name}** stored and staged ({len(content):,} chars)"
+            )
 
     try:
         ev_df = _query(
             session,
             "SELECT EVIDENCE_ID,SOURCE_FILENAME,CHAR_COUNT,CONTENT_SHA256,"
-            "EVIDENCE_STATUS,UPLOADED_AT FROM EVIDENCE_ITEMS "
+            "STAGE_PATH,EVIDENCE_STATUS,UPLOADED_AT FROM EVIDENCE_ITEMS "
             "WHERE RUN_ID = ? AND SOURCE_TYPE = 'UPLOADED_TXT' "
             "ORDER BY UPLOADED_AT DESC",
             [run_id],
@@ -233,12 +255,16 @@ def _render_evidence_upload(session, run_id):
         if not ev_df.empty:
             st.caption(f"{len(ev_df)} uploaded file(s)")
             _show_df(ev_df.rename(columns={
-                "EVIDENCE_ID": "ID", "SOURCE_FILENAME": "File",
-                "CHAR_COUNT": "Chars", "CONTENT_SHA256": "SHA-256",
-                "EVIDENCE_STATUS": "Status", "UPLOADED_AT": "Uploaded"}))
+                "EVIDENCE_ID": "ID",
+                "SOURCE_FILENAME": "File",
+                "CHAR_COUNT": "Chars",
+                "CONTENT_SHA256": "SHA-256",
+                "STAGE_PATH": "Stored path",
+                "EVIDENCE_STATUS": "Status",
+                "UPLOADED_AT": "Uploaded",
+            }))
     except Exception:
         pass
-
 
 def _render_generate_dp(session, run_id):
     st.subheader("Generate Decision Pack")
