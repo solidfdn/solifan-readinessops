@@ -5,6 +5,7 @@ from datetime import datetime
 import pandas as pd
 import streamlit as st
 from snowflake.snowpark.context import get_active_session
+from value_control_plane import render_value_control_plane
 
 
 # ============================================================
@@ -15,6 +16,27 @@ st.set_page_config(
     page_icon="✓",
     layout="wide",
 )
+
+
+# ============================================================
+# Theme toggle (dark/light)
+# ============================================================
+if "app_theme" not in st.session_state:
+    st.session_state.app_theme = "dark"
+
+_tcol1, _tcol2 = st.columns([10, 1])
+with _tcol2:
+    _icon = "\u2600\ufe0f" if st.session_state.app_theme == "dark" else "\U0001f319"
+    if st.button(_icon, key="theme_toggle", help="Light / Dark"):
+        st.session_state.app_theme = (
+            "light" if st.session_state.app_theme == "dark" else "dark"
+        )
+        if hasattr(st, "rerun"):
+            st.rerun()
+        else:
+            st.experimental_rerun()
+
+_is_dark = st.session_state.app_theme == "dark"
 
 session = get_active_session()
 
@@ -142,25 +164,60 @@ def evidence_needs_attention(value):
     return status not in verified
 
 
-st.markdown(
-    """
-<style>
-:root {
-  --ink: #14213d;
-  --muted: #667085;
-  --line: #dfe5ee;
-  --soft: #f6f8fc;
-  --blue: #2457c5;
-  --navy: #182a4d;
-  --green: #18794e;
-  --amber: #9a6700;
-  --red: #b42318;
-}
+# Theme-aware CSS
+# ============================================================
+_dark_root = (
+    ":root {"
+    "  --ink: #e8ecf0;"
+    "  --muted: #a0aec0;"
+    "  --line: #3a4a5e;"
+    "  --soft: #1e2a3a;"
+    "  --card-bg: #1a2736;"
+    "  --blue: #5b9bf5;"
+    "  --navy: #a8c8f0;"
+    "  --green: #4fd1c5;"
+    "  --amber: #f6c144;"
+    "  --red: #fc8181;"
+    "}"
+)
+
+_light_root = (
+    ":root {"
+    "  --ink: #14213d;"
+    "  --muted: #667085;"
+    "  --line: #dfe5ee;"
+    "  --soft: #f6f8fc;"
+    "  --card-bg: #ffffff;"
+    "  --blue: #2457c5;"
+    "  --navy: #182a4d;"
+    "  --green: #18794e;"
+    "  --amber: #9a6700;"
+    "  --red: #b42318;"
+    "}"
+)
+
+_root_vars = _dark_root if _is_dark else _light_root
+
+_badge_css = (
+    ".badge-high, .badge-danger {background:#3b1c1c; color:var(--red); border:1px solid #5c2a2a;}"
+    ".badge-medium, .badge-warning {background:#3b3315; color:var(--amber); border:1px solid #5c4d1a;}"
+    ".badge-low, .badge-success {background:#1a3a2a; color:var(--green); border:1px solid #2a5c40;}"
+    ".badge-info {background:#1a2744; color:#8ab4f8; border:1px solid #2a3d66;}"
+    ".badge-neutral {background:#1e2a3a; color:#a0aec0; border:1px solid #3a4a5e;}"
+) if _is_dark else (
+    ".badge-high, .badge-danger {background:#fff1f0; color:var(--red); border:1px solid #fecdca;}"
+    ".badge-medium, .badge-warning {background:#fff8e6; color:var(--amber); border:1px solid #fedf89;}"
+    ".badge-low, .badge-success {background:#ecfdf3; color:var(--green); border:1px solid #abefc6;}"
+    ".badge-info {background:#eef4ff; color:#3538cd; border:1px solid #c7d7fe;}"
+    ".badge-neutral {background:#f2f4f7; color:#475467; border:1px solid #e4e7ec;}"
+)
+
+_layout_css = """
 .block-container {padding-top: 1.4rem; padding-bottom: 3rem; max-width: 1500px;}
 h1, h2, h3 {color: var(--ink); letter-spacing: -0.02em;}
 h1 {margin-bottom: 0.2rem;}
 [data-testid="stMetric"] {
-  background: #ffffff;
+  background: var(--card-bg);
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 0.9rem 1rem;
@@ -177,27 +234,27 @@ h1 {margin-bottom: 0.2rem;}
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 0.85rem 1rem;
-  background: white;
+  background: var(--card-bg);
 }
 .workflow-step strong {display:block; color: var(--ink); margin-bottom: 0.2rem;}
 .workflow-step span {color: var(--muted); font-size: 0.88rem;}
 .section-note {
   border-left: 4px solid var(--blue);
-  background: #f4f7ff;
+  background: var(--soft);
   padding: 0.8rem 1rem;
   border-radius: 0 10px 10px 0;
-  color: #243b66;
+  color: var(--ink);
   margin: 0.35rem 0 1rem 0;
 }
 .proposal-card {
   border: 1px solid var(--line);
   border-radius: 14px;
-  background: white;
+  background: var(--card-bg);
   padding: 1.05rem 1.1rem 0.8rem 1.1rem;
   margin: 0.65rem 0 0.25rem 0;
 }
 .proposal-title {font-size: 1.08rem; font-weight: 700; color: var(--ink); margin: 0.35rem 0;}
-.proposal-copy {color: #344054; line-height: 1.55; margin: 0.35rem 0;}
+.proposal-copy {color: var(--muted); line-height: 1.55; margin: 0.35rem 0;}
 .context-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -206,32 +263,29 @@ h1 {margin-bottom: 0.2rem;}
 }
 .context-box {
   background: var(--soft);
-  border: 1px solid #e9edf4;
+  border: 1px solid var(--line);
   border-radius: 10px;
   padding: 0.7rem 0.8rem;
 }
-.context-box b {display:block; color: #475467; font-size: 0.78rem; text-transform: uppercase; letter-spacing: .04em; margin-bottom: .25rem;}
-.context-box span {color: #1d2939; line-height: 1.45;}
+.context-box b {display:block; color: var(--muted); font-size: 0.78rem; text-transform: uppercase; letter-spacing: .04em; margin-bottom: .25rem;}
+.context-box span {color: var(--ink); line-height: 1.45;}
 .badge {display:inline-block; padding: .2rem .48rem; border-radius: 999px; font-size: .76rem; font-weight: 700; margin-right: .3rem;}
-.badge-high, .badge-danger {background:#fff1f0; color:var(--red); border:1px solid #fecdca;}
-.badge-medium, .badge-warning {background:#fff8e6; color:var(--amber); border:1px solid #fedf89;}
-.badge-low, .badge-success {background:#ecfdf3; color:var(--green); border:1px solid #abefc6;}
-.badge-info {background:#eef4ff; color:#3538cd; border:1px solid #c7d7fe;}
-.badge-neutral {background:#f2f4f7; color:#475467; border:1px solid #e4e7ec;}
 .published-card {
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: .85rem 1rem;
   margin: .45rem 0;
-  background: white;
+  background: var(--card-bg);
 }
 .small-muted {color: var(--muted); font-size: .84rem;}
 .audit-row {border-bottom:1px solid var(--line); padding:.65rem 0;}
 @media (max-width: 900px) {
   .workflow, .context-grid {grid-template-columns: 1fr;}
 }
-</style>
-""",
+"""
+
+st.markdown(
+    "<style>" + _root_vars + _layout_css + _badge_css + "</style>",
     unsafe_allow_html=True,
 )
 
@@ -598,7 +652,7 @@ if last_error_message:
 
 workspace = st.radio(
     "Workspace",
-    options=["Review queue", "Published records", "Audit trail", "Review setup"],
+    options=["Review queue", "Value Control Plane", "Published records", "Audit trail", "Review setup"],
     horizontal=True,
     key="workspace_navigation",
 )
@@ -1361,6 +1415,14 @@ elif workspace == "Audit trail":
                     f"Proposal ID: {text(row['PROPOSAL_ID'])} · "
                     f"History ID: {text(row['APPROVAL_HISTORY_ID'])}"
                 )
+
+
+# ============================================================
+# Value Control Plane
+# ============================================================
+elif workspace == "Value Control Plane":
+    current_actor = session.sql("SELECT CURRENT_USER()").collect()[0][0]
+    render_value_control_plane(session, selected_run_id, current_actor)
 
 
 # ============================================================
