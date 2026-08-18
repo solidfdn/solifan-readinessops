@@ -331,7 +331,7 @@ def _render_evidence_upload(session, run_id):
                 "PARSER_NAME,PAGE_COUNT,UPLOADED_AT,UPLOADED_BY"
                 ") VALUES ("
                 "?, ?, NULL, ?, ?, 'VALIDATED', ?, ?, ?, "
-                "?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP(), CURRENT_USER())",
+                "?, ?, ?, ?, ?, TRY_TO_NUMBER(?), CURRENT_TIMESTAMP(), CURRENT_USER())",
                 [
                     ev_id, run_id, uf.name, content, uf.name,
                     source_type, media_type, sha, len(raw), len(content),
