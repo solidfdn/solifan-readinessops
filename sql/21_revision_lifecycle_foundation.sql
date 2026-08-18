@@ -16,7 +16,7 @@
 -- deferred until the production object inventory and migration preview pass.
 -- ============================================================
 
-USE SCHEMA READINESSOPS_VALIDATION.APP;
+USE SCHEMA APP;
 
 -- ============================================================
 -- A. ASSESSMENT_CASE

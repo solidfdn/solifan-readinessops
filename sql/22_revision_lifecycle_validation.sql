@@ -5,7 +5,7 @@
 -- Safe before and after existing-run migration.
 -- ============================================================
 
-USE SCHEMA READINESSOPS_VALIDATION.APP;
+USE SCHEMA APP;
 
 SELECT '1_DUPLICATE_CASE_ID' AS TEST_NAME, COUNT(*) AS FAIL_COUNT
 FROM (

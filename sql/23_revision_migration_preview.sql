@@ -5,7 +5,7 @@
 -- Review every candidate before writing the separate migration procedure.
 -- ============================================================
 
-USE SCHEMA READINESSOPS_VALIDATION.APP;
+USE SCHEMA APP;
 
 WITH RUN_INVENTORY AS (
     SELECT
