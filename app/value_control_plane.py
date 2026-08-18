@@ -176,12 +176,48 @@ def _render_initiative(session, run_id, selected_run):
 
 def _render_evidence_upload(session, run_id):
     st.subheader("Upload evidence")
-    files = st.file_uploader(
-        "Upload .txt or .pdf files",
-        type=["txt", "pdf"],
-        accept_multiple_files=True,
-        key="vcp_txt_up",
+    revision_id = None
+    revision_no = None
+    revision_status = None
+    try:
+        revision_df = _query(
+            session,
+            "SELECT revision.REVISION_ID, revision.REVISION_NO, revision.STATUS, "
+            "IFF(case_record.ACTIVE_DRAFT_REVISION_ID = revision.REVISION_ID, TRUE, FALSE) "
+            "AS IS_ACTIVE_DRAFT "
+            "FROM ASSESSMENT_REVISION revision "
+            "JOIN ASSESSMENT_CASE case_record ON case_record.CASE_ID = revision.CASE_ID "
+            "WHERE revision.RUN_ID = ?",
+            [run_id],
+        )
+        if not revision_df.empty:
+            revision_id = _text(revision_df.iloc[0]["REVISION_ID"], "")
+            revision_no = _integer(revision_df.iloc[0]["REVISION_NO"])
+            revision_status = _text(revision_df.iloc[0]["STATUS"], "")
+            is_active_draft = bool(revision_df.iloc[0]["IS_ACTIVE_DRAFT"])
+            if is_active_draft and revision_status in {"DRAFT", "FAILED"}:
+                st.caption(
+                    f"Revision {revision_no} · Draft · New files remain pending until reassessment and publication."
+                )
+            else:
+                st.info(
+                    f"Revision {revision_no} is {revision_status}. "
+                    "Select its active Draft Revision to add evidence."
+                )
+    except Exception:
+        is_active_draft = True
+
+    upload_enabled = revision_id is None or (
+        is_active_draft and revision_status in {"DRAFT", "FAILED"}
     )
+    files = None
+    if upload_enabled:
+        files = st.file_uploader(
+            "Upload .txt or .pdf files",
+            type=["txt", "pdf"],
+            accept_multiple_files=True,
+            key="vcp_txt_up",
+        )
 
     if files:
         for uf in files:
@@ -302,6 +338,23 @@ def _render_evidence_upload(session, run_id):
                     stage_path, parser_name, page_count,
                 ],
             )
+            if revision_id:
+                registration = _call_json(
+                    session,
+                    "CALL SP_REGISTER_REVISION_EVIDENCE(?, ?, NULL)",
+                    [revision_id, ev_id],
+                )
+                if registration.get("status") != "OK":
+                    _execute(
+                        session,
+                        "DELETE FROM EVIDENCE_ITEMS WHERE EVIDENCE_ID = ? AND RUN_ID = ?",
+                        [ev_id, run_id],
+                    )
+                    st.error(
+                        f"**{uf.name}**: Revision registration failed: "
+                        f"{registration.get('error', 'Unknown error')}"
+                    )
+                    continue
             st.success(
                 f"**{uf.name}** stored, parsed, and validated "
                 f"({len(content):,} chars)"
@@ -310,12 +363,18 @@ def _render_evidence_upload(session, run_id):
     try:
         ev_df = _query(
             session,
-            "SELECT EVIDENCE_ID,SOURCE_FILENAME,SOURCE_TYPE,CHAR_COUNT,"
-            "PAGE_COUNT,PARSER_NAME,STAGE_PATH,EVIDENCE_STATUS,UPLOADED_AT "
-            "FROM EVIDENCE_ITEMS "
-            "WHERE RUN_ID = ? "
+            "SELECT evidence.EVIDENCE_ID,evidence.SOURCE_FILENAME,evidence.SOURCE_TYPE,"
+            "evidence.CHAR_COUNT,evidence.PAGE_COUNT,evidence.PARSER_NAME,"
+            "evidence.STAGE_PATH,evidence.EVIDENCE_STATUS,evidence.UPLOADED_AT,"
+            "COALESCE(lineage.SNAPSHOT_ROLE, 'LEGACY') AS REVISION_ROLE "
+            "FROM EVIDENCE_ITEMS evidence "
+            "LEFT JOIN ASSESSMENT_REVISION revision ON revision.RUN_ID = evidence.RUN_ID "
+            "LEFT JOIN ASSESSMENT_REVISION_EVIDENCE lineage "
+            "ON lineage.REVISION_ID = revision.REVISION_ID "
+            "AND lineage.EVIDENCE_ID = evidence.EVIDENCE_ID "
+            "WHERE evidence.RUN_ID = ? "
             "AND SOURCE_TYPE IN ('UPLOADED_TXT', 'UPLOADED_PDF') "
-            "ORDER BY UPLOADED_AT DESC",
+            "ORDER BY evidence.UPLOADED_AT DESC",
             [run_id],
         )
         if not ev_df.empty:
@@ -330,6 +389,7 @@ def _render_evidence_upload(session, run_id):
                 "STAGE_PATH": "Stored path",
                 "EVIDENCE_STATUS": "Status",
                 "UPLOADED_AT": "Uploaded",
+                "REVISION_ROLE": "Revision role",
             }))
     except Exception:
         pass
