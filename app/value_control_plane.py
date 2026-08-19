@@ -559,7 +559,7 @@ def _render_revision_history(session, run_id):
 
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Compared items", len(selected))
-    c2.metric("Updated", _integer((selected["CHANGE_TYPE"].astype(str) == "UPDATED").sum()))
+    c2.metric("Modified", _integer((selected["CHANGE_TYPE"].astype(str) == "MODIFIED").sum()))
     c3.metric("New", _integer((selected["CHANGE_TYPE"].astype(str) == "NEW").sum()))
     c4.metric("Resolved", _integer((selected["CHANGE_TYPE"].astype(str) == "RESOLVED").sum()))
 
