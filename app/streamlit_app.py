@@ -723,9 +723,7 @@ if latest_attempt is not None and text(latest_attempt["STATUS"], "") == "FAILED"
         "The latest AI review attempt failed. The workspace is showing the most recent completed review. "
         f"Error: {text(latest_attempt['ERROR_MESSAGE'])}"
     )
-elif latest_completed is None:
-    st.warning("No completed AI governance review exists for this Assessment Run.")
-else:
+elif latest_completed is not None:
     st.markdown(
         f"<div class='section-note'><b>Current review:</b> {escaped(latest_agent_run_id)} · "
         f"Completed {escaped(timestamp_text(latest_completed['COMPLETED_AT']))} · "
@@ -741,11 +739,23 @@ last_error_message = st.session_state.pop("last_error_message", None)
 if last_error_message:
     st.error(last_error_message)
 
+assessment_navigation_context = (
+    f"{selected_run_id}:{integer(current_revision_no)}:"
+    f"{integer(draft_revision_no) if has_active_draft else 'none'}"
+)
+workspace_options = [
+    "Review queue",
+    "Value Control Plane",
+    "Published records",
+    "Audit trail",
+    "Review setup",
+]
 workspace = st.radio(
     "Workspace",
-    options=["Review queue", "Value Control Plane", "Published records", "Audit trail", "Review setup"],
+    options=workspace_options,
+    index=1 if has_active_draft else 0,
     horizontal=True,
-    key="workspace_navigation",
+    key=f"workspace_navigation_{assessment_navigation_context}",
 )
 
 
@@ -760,7 +770,16 @@ if workspace == "Review queue":
     )
 
     if proposals_df.empty:
-        st.info("No proposals are available. Open Review setup to generate an AI review.")
+        if has_active_draft:
+            st.info(
+                "This Draft Revision does not yet have a completed governance "
+                "review. Open Review setup to generate one."
+            )
+        else:
+            st.info(
+                "No proposals are available. Open Review setup to generate an "
+                "AI review."
+            )
     else:
         def render_proposal_detail(row, key_prefix):
             proposal_id = text(row["PROPOSAL_ID"], "")
@@ -1545,7 +1564,13 @@ elif workspace == "Audit trail":
 # ============================================================
 elif workspace == "Value Control Plane":
     current_actor = session.sql("SELECT CURRENT_USER()").collect()[0][0]
-    render_value_control_plane(session, selected_run_id, current_actor)
+    render_value_control_plane(
+        session,
+        selected_run_id,
+        current_actor,
+        initial_section="Revisions" if has_active_draft else "Initiative",
+        navigation_key=assessment_navigation_context,
+    )
 
 
 # ============================================================
