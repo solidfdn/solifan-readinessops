@@ -5,15 +5,16 @@ renders the complete Decision Pack workspace: AI Initiative, retained TXT/PDF
 evidence, Draft Decision Pack review, Published Governed Records, AI Portfolio.
 """
 
+import base64
 import hashlib
+import io
 import json
-import os
-import tempfile
 from datetime import datetime
 from uuid import uuid4
 
 import pandas as pd
 import streamlit as st
+from pypdf import PdfReader
 
 
 # -- Helpers ------------------------------------------------------------------
@@ -251,41 +252,10 @@ def _render_evidence_upload(session, run_id):
                 f"EV_{extension.upper()}_"
                 f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{sha[:8]}"
             )
-            relative_path = f"{run_id}/{ev_id}/{sha}.{extension}"
-            stage_path = f"@READINESSOPS_EVIDENCE_STAGE/{relative_path}"
-            stage_prefix = f"@READINESSOPS_EVIDENCE_STAGE/{run_id}/{ev_id}"
-
-            try:
-                # Warehouse-runtime Streamlit can fail inside the connector's
-                # in-memory open_stream path. Materialize the immutable bytes in
-                # the writable /tmp filesystem and use the supported file PUT
-                # path instead. The temporary file is removed automatically.
-                with tempfile.TemporaryDirectory(
-                    prefix="readinessops_evidence_",
-                    dir="/tmp",
-                ) as temp_dir:
-                    local_path = os.path.join(temp_dir, f"{sha}.{extension}")
-                    with open(local_path, "wb") as local_file:
-                        local_file.write(raw)
-                    put_results = session.file.put(
-                        local_path,
-                        stage_prefix,
-                        auto_compress=False,
-                        overwrite=True,
-                    )
-                if not put_results:
-                    raise RuntimeError("PUT returned no result")
-                put_result = put_results[0]
-                put_status = _text(getattr(put_result, "status", ""), "")
-                if put_status and put_status not in {"UPLOADED", "SKIPPED"}:
-                    raise RuntimeError(f"Unexpected PUT status: {put_status}")
-            except Exception as exc:
-                detail = str(exc).replace("\n", " ")[:400]
-                st.error(
-                    f"**{uf.name}**: Original file storage failed "
-                    f"({type(exc).__name__}: {detail})"
-                )
-                continue
+            storage_path = (
+                "SNOWFLAKE_BINARY://EVIDENCE_ORIGINAL_OBJECT/"
+                f"{sha}"
+            )
 
             if extension == "txt":
                 try:
@@ -309,58 +279,81 @@ def _render_evidence_upload(session, run_id):
 
             elif extension == "pdf":
                 try:
-                    parsed_df = _query(
-                        session,
-                        "SELECT "
-                        "PARSED:value:content::VARCHAR AS CONTENT, "
-                        "PARSED:error::VARCHAR AS ERROR, "
-                        "PARSED:metadata:pageCount::NUMBER AS PAGE_COUNT "
-                        "FROM (SELECT AI_PARSE_DOCUMENT("
-                        "TO_FILE('@READINESSOPS_EVIDENCE_STAGE', ?), "
-                        "{'mode': 'LAYOUT'}, TRUE) AS PARSED)",
-                        [relative_path],
+                    reader = PdfReader(io.BytesIO(raw))
+                    page_count = len(reader.pages)
+                    content = "\n\n".join(
+                        page.extract_text() or "" for page in reader.pages
                     )
-                    if parsed_df.empty:
-                        st.error(f"**{uf.name}**: PDF parsing returned no result.")
-                        continue
-                    parse_error = _text(parsed_df.iloc[0]["ERROR"], "")
-                    content = _text(parsed_df.iloc[0]["CONTENT"], "")
-                    page_count = _integer(parsed_df.iloc[0]["PAGE_COUNT"])
-                    if parse_error:
-                        st.error(f"**{uf.name}**: PDF parsing failed.")
-                        continue
                     if not content.strip():
                         st.error(f"**{uf.name}**: No text extracted from PDF.")
                         continue
-                except Exception:
-                    st.error(f"**{uf.name}**: PDF parsing failed.")
+                except Exception as exc:
+                    detail = str(exc).replace("\n", " ")[:300]
+                    st.error(
+                        f"**{uf.name}**: PDF parsing failed "
+                        f"({type(exc).__name__}: {detail})."
+                    )
                     continue
 
                 source_type = "UPLOADED_PDF"
                 media_type = "application/pdf"
-                parser_name = "AI_PARSE_DOCUMENT_LAYOUT"
+                parser_name = "PYPDF_TEXT"
 
             else:
                 st.error(f"**{uf.name}**: Unsupported file type.")
                 continue
 
-            _execute(
-                session,
-                "INSERT INTO EVIDENCE_ITEMS ("
-                "EVIDENCE_ID,RUN_ID,QUESTION_ID,"
-                "EVIDENCE_TITLE,EVIDENCE_TEXT,EVIDENCE_STATUS,"
-                "SOURCE_FILENAME,SOURCE_TYPE,MEDIA_TYPE,"
-                "CONTENT_SHA256,BYTE_COUNT,CHAR_COUNT,STAGE_PATH,"
-                "PARSER_NAME,PAGE_COUNT,UPLOADED_AT,UPLOADED_BY"
-                ") VALUES ("
-                "?, ?, NULL, ?, ?, 'VALIDATED', ?, ?, ?, "
-                "?, ?, ?, ?, ?, TRY_TO_NUMBER(?), CURRENT_TIMESTAMP(), CURRENT_USER())",
-                [
-                    ev_id, run_id, uf.name, content, uf.name,
-                    source_type, media_type, sha, len(raw), len(content),
-                    stage_path, parser_name, page_count,
-                ],
-            )
+            try:
+                encoded_original = base64.b64encode(raw).decode("ascii")
+                _execute(
+                    session,
+                    "MERGE INTO EVIDENCE_ORIGINAL_OBJECT target "
+                    "USING (SELECT ? AS CONTENT_SHA256, "
+                    "TO_BINARY(?, 'BASE64') AS FILE_CONTENT, "
+                    "TRY_TO_NUMBER(?) AS BYTE_COUNT, ? AS MEDIA_TYPE, "
+                    "? AS FIRST_SOURCE_FILENAME) source "
+                    "ON target.CONTENT_SHA256 = source.CONTENT_SHA256 "
+                    "WHEN NOT MATCHED THEN INSERT ("
+                    "CONTENT_SHA256,FILE_CONTENT,BYTE_COUNT,MEDIA_TYPE,"
+                    "FIRST_SOURCE_FILENAME,CREATED_AT,CREATED_BY"
+                    ") VALUES (source.CONTENT_SHA256,source.FILE_CONTENT,"
+                    "source.BYTE_COUNT,source.MEDIA_TYPE,"
+                    "source.FIRST_SOURCE_FILENAME,CURRENT_TIMESTAMP(),CURRENT_USER())",
+                    [sha, encoded_original, len(raw), media_type, uf.name],
+                )
+                _execute(
+                    session,
+                    "INSERT INTO EVIDENCE_ITEMS ("
+                    "EVIDENCE_ID,RUN_ID,QUESTION_ID,"
+                    "EVIDENCE_TITLE,EVIDENCE_TEXT,EVIDENCE_STATUS,"
+                    "SOURCE_FILENAME,SOURCE_TYPE,MEDIA_TYPE,"
+                    "CONTENT_SHA256,BYTE_COUNT,CHAR_COUNT,STAGE_PATH,"
+                    "PARSER_NAME,PAGE_COUNT,UPLOADED_AT,UPLOADED_BY"
+                    ") VALUES ("
+                    "?, ?, NULL, ?, ?, 'VALIDATED', ?, ?, ?, "
+                    "?, ?, ?, ?, ?, TRY_TO_NUMBER(?), CURRENT_TIMESTAMP(), CURRENT_USER())",
+                    [
+                        ev_id, run_id, uf.name, content, uf.name,
+                        source_type, media_type, sha, len(raw), len(content),
+                        storage_path, parser_name, page_count,
+                    ],
+                )
+            except Exception as exc:
+                _execute(
+                    session,
+                    "DELETE FROM EVIDENCE_ORIGINAL_OBJECT "
+                    "WHERE CONTENT_SHA256 = ? "
+                    "AND NOT EXISTS (SELECT 1 FROM EVIDENCE_ITEMS evidence "
+                    "WHERE evidence.CONTENT_SHA256 = "
+                    "EVIDENCE_ORIGINAL_OBJECT.CONTENT_SHA256)",
+                    [sha],
+                )
+                detail = str(exc).replace("\n", " ")[:400]
+                st.error(
+                    f"**{uf.name}**: Snowflake original storage failed "
+                    f"({type(exc).__name__}: {detail})"
+                )
+                continue
             if revision_id:
                 registration = _call_json(
                     session,
@@ -372,6 +365,15 @@ def _render_evidence_upload(session, run_id):
                         session,
                         "DELETE FROM EVIDENCE_ITEMS WHERE EVIDENCE_ID = ? AND RUN_ID = ?",
                         [ev_id, run_id],
+                    )
+                    _execute(
+                        session,
+                        "DELETE FROM EVIDENCE_ORIGINAL_OBJECT "
+                        "WHERE CONTENT_SHA256 = ? "
+                        "AND NOT EXISTS (SELECT 1 FROM EVIDENCE_ITEMS evidence "
+                        "WHERE evidence.CONTENT_SHA256 = "
+                        "EVIDENCE_ORIGINAL_OBJECT.CONTENT_SHA256)",
+                        [sha],
                     )
                     st.error(
                         f"**{uf.name}**: Revision registration failed: "
