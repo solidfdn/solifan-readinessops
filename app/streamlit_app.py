@@ -743,26 +743,19 @@ assessment_navigation_context = (
     f"{selected_run_id}:{integer(current_revision_no)}:"
     f"{integer(draft_revision_no) if has_active_draft else 'none'}"
 )
-if (
-    st.session_state.get("assessment_navigation_context")
-    != assessment_navigation_context
-):
-    st.session_state["workspace_navigation"] = (
-        "Value Control Plane" if has_active_draft else "Review queue"
-    )
-    st.session_state["vcp_section_nav"] = (
-        "Revisions" if has_active_draft else "Initiative"
-    )
-    st.session_state["assessment_navigation_context"] = (
-        assessment_navigation_context
-    )
-    rerun_app()
-
+workspace_options = [
+    "Review queue",
+    "Value Control Plane",
+    "Published records",
+    "Audit trail",
+    "Review setup",
+]
 workspace = st.radio(
     "Workspace",
-    options=["Review queue", "Value Control Plane", "Published records", "Audit trail", "Review setup"],
+    options=workspace_options,
+    index=1 if has_active_draft else 0,
     horizontal=True,
-    key="workspace_navigation",
+    key=f"workspace_navigation_{assessment_navigation_context}",
 )
 
 
@@ -1571,7 +1564,13 @@ elif workspace == "Audit trail":
 # ============================================================
 elif workspace == "Value Control Plane":
     current_actor = session.sql("SELECT CURRENT_USER()").collect()[0][0]
-    render_value_control_plane(session, selected_run_id, current_actor)
+    render_value_control_plane(
+        session,
+        selected_run_id,
+        current_actor,
+        initial_section="Revisions" if has_active_draft else "Initiative",
+        navigation_key=assessment_navigation_context,
+    )
 
 
 # ============================================================

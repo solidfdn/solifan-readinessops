@@ -1106,7 +1106,13 @@ def _render_portfolio(session):
 
 # -- Public entry point -------------------------------------------------------
 
-def render_value_control_plane(session, assessment_run_id: str, actor: str) -> None:
+def render_value_control_plane(
+    session,
+    assessment_run_id: str,
+    actor: str,
+    initial_section: str = "Initiative",
+    navigation_key: str = "",
+) -> None:
     """Render the Foundation Slice 1 workspace.
 
     Call from streamlit_app.py when the user selects the Value Control Plane
@@ -1136,10 +1142,24 @@ def render_value_control_plane(session, assessment_run_id: str, actor: str) -> N
     st.header("Value Control Plane")
     st.caption(f"Assessment: {_text(run_row['RUN_NAME'])} · Actor: {actor}")
 
+    section_options = [
+        "Initiative",
+        "Evidence",
+        "Revisions",
+        "Decision Pack",
+        "Published",
+        "Portfolio",
+    ]
+    if initial_section not in section_options:
+        initial_section = "Initiative"
+
     vcp_tab = st.radio(
         "Section",
-        ["Initiative", "Evidence", "Revisions", "Decision Pack", "Published", "Portfolio"],
-        horizontal=True, key="vcp_section_nav")
+        section_options,
+        index=section_options.index(initial_section),
+        horizontal=True,
+        key=f"vcp_section_nav_{navigation_key or assessment_run_id}",
+    )
 
     if vcp_tab == "Initiative":
         _render_initiative(session, assessment_run_id, run_row)

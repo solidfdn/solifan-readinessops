@@ -4,32 +4,32 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 APP = (ROOT / "app" / "streamlit_app.py").read_text(encoding="utf-8")
+VALUE_CONTROL_PLANE = (
+    ROOT / "app" / "value_control_plane.py"
+).read_text(encoding="utf-8")
 
 
 class DemoEntryContractTests(unittest.TestCase):
     def test_active_draft_opens_value_control_plane(self):
-        self.assertIn(
-            '"Value Control Plane" if has_active_draft else "Review queue"',
-            APP,
-        )
+        self.assertIn("index=1 if has_active_draft else 0", APP)
 
     def test_active_draft_opens_revision_workspace(self):
         self.assertIn(
-            '"Revisions" if has_active_draft else "Initiative"',
+            'initial_section="Revisions" if has_active_draft else "Initiative"',
             APP,
         )
+        self.assertIn("index=section_options.index(initial_section)", VALUE_CONTROL_PLANE)
 
-    def test_navigation_is_only_reset_when_assessment_context_changes(self):
-        self.assertIn('st.session_state.get("assessment_navigation_context")', APP)
+    def test_navigation_uses_revision_specific_widget_keys(self):
         self.assertIn(
-            'st.session_state["assessment_navigation_context"]',
+            'key=f"workspace_navigation_{assessment_navigation_context}"',
             APP,
         )
-        navigation_block = APP.split(
-            'if (\n    st.session_state.get("assessment_navigation_context")',
-            1,
-        )[1].split("\n\nworkspace = st.radio(", 1)[0]
-        self.assertIn("rerun_app()", navigation_block)
+        self.assertNotIn('st.session_state["workspace_navigation"]', APP)
+        self.assertIn(
+            'key=f"vcp_section_nav_{navigation_key or assessment_run_id}"',
+            VALUE_CONTROL_PLANE,
+        )
 
     def test_user_facing_copy_uses_revision_not_run(self):
         self.assertNotIn(
