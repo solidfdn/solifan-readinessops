@@ -756,6 +756,7 @@ if (
     st.session_state["assessment_navigation_context"] = (
         assessment_navigation_context
     )
+    rerun_app()
 
 workspace = st.radio(
     "Workspace",

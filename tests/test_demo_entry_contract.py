@@ -25,6 +25,11 @@ class DemoEntryContractTests(unittest.TestCase):
             'st.session_state["assessment_navigation_context"]',
             APP,
         )
+        navigation_block = APP.split(
+            'if (\n    st.session_state.get("assessment_navigation_context")',
+            1,
+        )[1].split("\n\nworkspace = st.radio(", 1)[0]
+        self.assertIn("rerun_app()", navigation_block)
 
     def test_user_facing_copy_uses_revision_not_run(self):
         self.assertNotIn(
