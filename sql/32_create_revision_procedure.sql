@@ -1,9 +1,8 @@
 -- ============================================================
--- Revision Draft Procedures
+-- Safe Recreation: SP_CREATE_ASSESSMENT_REVISION only
 -- ============================================================
--- Creates a new draft Revision without modifying the published base Revision.
--- Existing answers and Evidence are copied into the new Run snapshot.
--- ============================================================
+-- Do not replace SP_REGISTER_REVISION_EVIDENCE from this file.
+-- That procedure is independently maintained by sql/29.
 
 USE SCHEMA APP;
 
@@ -276,114 +275,6 @@ BEGIN
 EXCEPTION
     WHEN OTHER THEN
         ROLLBACK;
-        RETURN '{"status":"FAILED","error":"' || LEFT(SQLERRM, 500) || '"}';
-END;
-$$;
-
-CREATE OR REPLACE PROCEDURE SP_REGISTER_REVISION_EVIDENCE(
-    P_REVISION_ID VARCHAR,
-    P_EVIDENCE_ID VARCHAR,
-    P_REPLACED_EVIDENCE_ID VARCHAR DEFAULT NULL
-)
-RETURNS VARCHAR
-LANGUAGE SQL
-EXECUTE AS CALLER
-AS
-$$
-DECLARE
-    v_case_id VARCHAR;
-    v_run_id VARCHAR;
-    v_change_set_id VARCHAR;
-    v_origin_evidence_id VARCHAR;
-    v_existing_count INTEGER;
-    v_valid_count INTEGER;
-BEGIN
-    SELECT revision.CASE_ID, revision.RUN_ID
-      INTO :v_case_id, :v_run_id
-    FROM ASSESSMENT_REVISION revision
-    JOIN ASSESSMENT_CASE case_record
-      ON case_record.CASE_ID = revision.CASE_ID
-     AND case_record.ACTIVE_DRAFT_REVISION_ID = revision.REVISION_ID
-    WHERE revision.REVISION_ID = :P_REVISION_ID
-      AND revision.STATUS IN ('DRAFT', 'FAILED');
-
-    IF (:v_case_id IS NULL) THEN
-        RETURN '{"status":"FAILED","error":"Editable draft Revision not found"}';
-    END IF;
-
-    v_valid_count := (
-        SELECT COUNT(*)
-        FROM EVIDENCE_ITEMS
-        WHERE EVIDENCE_ID = :P_EVIDENCE_ID
-          AND RUN_ID = :v_run_id
-    );
-
-    IF (:v_valid_count <> 1) THEN
-        RETURN '{"status":"FAILED","error":"Evidence does not belong to the draft Run"}';
-    END IF;
-
-    v_existing_count := (
-        SELECT COUNT(*)
-        FROM ASSESSMENT_REVISION_EVIDENCE
-        WHERE REVISION_ID = :P_REVISION_ID
-          AND EVIDENCE_ID = :P_EVIDENCE_ID
-    );
-
-    IF (:v_existing_count > 0) THEN
-        RETURN '{"status":"FAILED","error":"Evidence is already registered"}';
-    END IF;
-
-    v_change_set_id := (
-        SELECT CHANGE_SET_ID
-        FROM ASSESSMENT_CHANGE_SET
-        WHERE TARGET_REVISION_ID = :P_REVISION_ID
-          AND STATUS = 'PENDING'
-        QUALIFY ROW_NUMBER() OVER (ORDER BY CREATED_AT DESC) = 1
-    );
-
-    IF (:v_change_set_id IS NULL) THEN
-        RETURN '{"status":"FAILED","error":"Pending Change Set not found"}';
-    END IF;
-
-    IF (P_REPLACED_EVIDENCE_ID IS NULL) THEN
-        v_origin_evidence_id := :P_EVIDENCE_ID;
-    ELSE
-        v_origin_evidence_id := (
-            SELECT ORIGIN_EVIDENCE_ID
-            FROM ASSESSMENT_REVISION_EVIDENCE
-            WHERE EVIDENCE_ID = :P_REPLACED_EVIDENCE_ID
-            QUALIFY ROW_NUMBER() OVER (ORDER BY CREATED_AT DESC) = 1
-        );
-
-        IF (:v_origin_evidence_id IS NULL) THEN
-            RETURN '{"status":"FAILED","error":"Replaced Evidence lineage not found"}';
-        END IF;
-    END IF;
-
-    INSERT INTO ASSESSMENT_REVISION_EVIDENCE (
-        REVISION_EVIDENCE_ID,
-        REVISION_ID,
-        EVIDENCE_ID,
-        ORIGIN_EVIDENCE_ID,
-        INHERITED_FROM_EVIDENCE_ID,
-        SNAPSHOT_ROLE,
-        CHANGE_SET_ID
-    ) SELECT
-        'RE_' || SHA2(:P_REVISION_ID || '|' || :P_EVIDENCE_ID, 256),
-        :P_REVISION_ID,
-        :P_EVIDENCE_ID,
-        :v_origin_evidence_id,
-        :P_REPLACED_EVIDENCE_ID,
-        IFF(:P_REPLACED_EVIDENCE_ID IS NULL, 'ADDED', 'REPLACED'),
-        :v_change_set_id
-    );
-
-    RETURN '{"status":"OK","revision_id":"' || :P_REVISION_ID ||
-        '","evidence_id":"' || :P_EVIDENCE_ID ||
-        '","snapshot_role":"' || IFF(:P_REPLACED_EVIDENCE_ID IS NULL, 'ADDED', 'REPLACED') || '"}';
-
-EXCEPTION
-    WHEN OTHER THEN
         RETURN '{"status":"FAILED","error":"' || LEFT(SQLERRM, 500) || '"}';
 END;
 $$;

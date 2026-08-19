@@ -231,6 +231,7 @@ def _render_evidence_upload(session, run_id):
             if not raw:
                 st.error(f"**{uf.name}**: Empty.")
                 continue
+
             if len(raw) > 20_000_000:
                 st.error(f"**{uf.name}**: Exceeds 20 MB.")
                 continue
@@ -419,6 +420,179 @@ def _render_evidence_upload(session, run_id):
             }))
     except Exception:
         pass
+
+
+def _render_revision_history(session, run_id):
+    """Show immutable Revision history and the frozen before/after comparison."""
+    st.subheader("Revision history and comparison")
+    st.caption(
+        "Published Revisions remain immutable. Draft changes become Current State only "
+        "after human approval and explicit publication."
+    )
+
+    try:
+        selected_revision = _query(
+            session,
+            "SELECT CASE_ID FROM ASSESSMENT_REVISION WHERE RUN_ID = ?",
+            [run_id],
+        )
+    except Exception as exc:
+        st.warning(f"Revision history is not available: {exc}")
+        return
+
+    if selected_revision.empty:
+        st.info("This assessment predates Revision tracking.")
+        return
+
+    case_id = _text(selected_revision.iloc[0]["CASE_ID"], "")
+    try:
+        current = _query(
+            session,
+            "SELECT CASE_NAME,CURRENT_REVISION_NO,CURRENT_RUN_ID,DRAFT_REVISION_NO,"
+            "DRAFT_STATUS,HAS_PENDING_CHANGES FROM V_ASSESSMENT_CASE_CURRENT "
+            "WHERE CASE_ID = ?",
+            [case_id],
+        )
+        history = _query(
+            session,
+            "SELECT REVISION_NO,STATUS,RUN_ID,CHANGE_REASON,IS_CURRENT,IS_ACTIVE_DRAFT,"
+            "CREATED_BY,CREATED_AT,PUBLISHED_BY,PUBLISHED_AT "
+            "FROM V_ASSESSMENT_REVISION_HISTORY WHERE CASE_ID = ? "
+            "ORDER BY REVISION_NO DESC",
+            [case_id],
+        )
+        comparison = _query(
+            session,
+            "SELECT FROM_REVISION_NO,TO_REVISION_NO,DELTA_ID,ENTITY_TYPE,LOGICAL_ITEM_ID,"
+            "CHANGE_TYPE,CHANGE_REASON,SOURCE_EVIDENCE_IDS,BEFORE_PAYLOAD,AFTER_PAYLOAD "
+            "FROM V_ASSESSMENT_REVISION_COMPARISON WHERE CASE_ID = ? "
+            "ORDER BY TO_REVISION_NO DESC,ENTITY_TYPE,LOGICAL_ITEM_ID",
+            [case_id],
+        )
+        evidence = _query(
+            session,
+            "SELECT revision.REVISION_NO,lineage.SNAPSHOT_ROLE,evidence.SOURCE_FILENAME,"
+            "lineage.EVIDENCE_ID,lineage.ORIGIN_EVIDENCE_ID,"
+            "lineage.INHERITED_FROM_EVIDENCE_ID "
+            "FROM ASSESSMENT_REVISION_EVIDENCE lineage "
+            "JOIN ASSESSMENT_REVISION revision "
+            "ON revision.REVISION_ID = lineage.REVISION_ID "
+            "JOIN EVIDENCE_ITEMS evidence ON evidence.EVIDENCE_ID = lineage.EVIDENCE_ID "
+            "WHERE revision.CASE_ID = ? "
+            "ORDER BY revision.REVISION_NO DESC,lineage.SNAPSHOT_ROLE,evidence.SOURCE_FILENAME",
+            [case_id],
+        )
+    except Exception as exc:
+        st.warning(f"Revision comparison could not be loaded: {exc}")
+        return
+
+    if current.empty:
+        st.info("Current Revision is not available.")
+        return
+
+    state = current.iloc[0]
+    current_no = _integer(state.get("CURRENT_REVISION_NO"))
+    draft_no = _text(state.get("DRAFT_REVISION_NO"), "None")
+    pending = bool(state.get("HAS_PENDING_CHANGES"))
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Current Revision", current_no)
+    m2.metric("Recorded Revisions", len(history))
+    m3.metric("Active Draft", draft_no)
+    m4.metric("Pending changes", "Yes" if pending else "No")
+
+    st.markdown("**Revision timeline**")
+    timeline = history.copy()
+    timeline["ROLE"] = timeline.apply(
+        lambda row: "CURRENT" if bool(row["IS_CURRENT"]) else (
+            "DRAFT" if bool(row["IS_ACTIVE_DRAFT"]) else "HISTORY"
+        ),
+        axis=1,
+    )
+    _show_df(timeline[[
+        "REVISION_NO", "ROLE", "STATUS", "RUN_ID", "CHANGE_REASON",
+        "PUBLISHED_BY", "PUBLISHED_AT",
+    ]].rename(columns={
+        "REVISION_NO": "Revision",
+        "STATUS": "Status",
+        "RUN_ID": "Assessment Run",
+        "CHANGE_REASON": "Change reason",
+        "PUBLISHED_BY": "Published by",
+        "PUBLISHED_AT": "Published at",
+    }))
+
+    st.markdown("**Evidence by Revision**")
+    if evidence.empty:
+        st.info("No Revision-linked Evidence is available.")
+    else:
+        _show_df(evidence.rename(columns={
+            "REVISION_NO": "Revision",
+            "SNAPSHOT_ROLE": "Revision role",
+            "SOURCE_FILENAME": "File",
+            "EVIDENCE_ID": "Evidence ID",
+            "ORIGIN_EVIDENCE_ID": "Origin Evidence",
+            "INHERITED_FROM_EVIDENCE_ID": "Inherited from",
+        }))
+
+    st.markdown("**Frozen decision comparison**")
+    if comparison.empty:
+        st.info("No before/after comparison has been recorded yet.")
+        return
+
+    transitions = comparison[["FROM_REVISION_NO", "TO_REVISION_NO"]].drop_duplicates()
+    transition_options = {
+        f"Revision {_integer(row['FROM_REVISION_NO'])} → "
+        f"Revision {_integer(row['TO_REVISION_NO'])}": (
+            row["FROM_REVISION_NO"], row["TO_REVISION_NO"]
+        )
+        for _, row in transitions.iterrows()
+    }
+    selected_label = st.selectbox(
+        "Comparison",
+        list(transition_options.keys()),
+        key=f"vcp_revision_comparison_{case_id}",
+    )
+    from_no, to_no = transition_options[selected_label]
+    selected = comparison[
+        (comparison["FROM_REVISION_NO"] == from_no)
+        & (comparison["TO_REVISION_NO"] == to_no)
+    ].copy()
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Compared items", len(selected))
+    c2.metric("Updated", _integer((selected["CHANGE_TYPE"].astype(str) == "UPDATED").sum()))
+    c3.metric("New", _integer((selected["CHANGE_TYPE"].astype(str) == "NEW").sum()))
+    c4.metric("Resolved", _integer((selected["CHANGE_TYPE"].astype(str) == "RESOLVED").sum()))
+
+    summary = selected[[
+        "ENTITY_TYPE", "LOGICAL_ITEM_ID", "CHANGE_TYPE", "CHANGE_REASON",
+        "SOURCE_EVIDENCE_IDS",
+    ]].rename(columns={
+        "ENTITY_TYPE": "Entity",
+        "LOGICAL_ITEM_ID": "Logical item",
+        "CHANGE_TYPE": "Change",
+        "CHANGE_REASON": "Reason",
+        "SOURCE_EVIDENCE_IDS": "Source Evidence",
+    })
+    _show_df(summary)
+
+    detail_options = {
+        f"{_text(row['ENTITY_TYPE'])} · {_text(row['LOGICAL_ITEM_ID'])} · "
+        f"{_text(row['CHANGE_TYPE'])}": row
+        for _, row in selected.iterrows()
+    }
+    selected_detail = st.selectbox(
+        "Comparison detail",
+        list(detail_options.keys()),
+        key=f"vcp_revision_detail_{case_id}_{_integer(to_no)}",
+    )
+    detail = detail_options[selected_detail]
+    before_col, after_col = st.columns(2)
+    with before_col:
+        st.markdown("**Before**")
+        st.json(detail["BEFORE_PAYLOAD"] or {})
+    with after_col:
+        st.markdown("**After**")
+        st.json(detail["AFTER_PAYLOAD"] or {})
 
 def _render_generate_dp(session, run_id):
     st.subheader("Generate Decision Pack")
@@ -776,13 +950,15 @@ def render_value_control_plane(session, assessment_run_id: str, actor: str) -> N
 
     vcp_tab = st.radio(
         "Section",
-        ["Initiative", "Evidence", "Decision Pack", "Published", "Portfolio"],
+        ["Initiative", "Evidence", "Revisions", "Decision Pack", "Published", "Portfolio"],
         horizontal=True, key="vcp_section_nav")
 
     if vcp_tab == "Initiative":
         _render_initiative(session, assessment_run_id, run_row)
     elif vcp_tab == "Evidence":
         _render_evidence_upload(session, assessment_run_id)
+    elif vcp_tab == "Revisions":
+        _render_revision_history(session, assessment_run_id)
     elif vcp_tab == "Decision Pack":
         if _text(run_row.get("INITIATIVE_ID"), ""):
             _render_generate_dp(session, assessment_run_id)

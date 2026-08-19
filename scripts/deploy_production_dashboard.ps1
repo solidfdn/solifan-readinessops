@@ -6,7 +6,8 @@ param(
     [string]$Warehouse = "READINESSOPS_WH",
     [string]$Role = "ACCOUNTADMIN",
     [string]$AppName = "READINESSOPS_DASHBOARD",
-    [string]$StageName = "READINESSOPS_PRODUCTION_STAGE"
+    [string]$StageName = "READINESSOPS_PRODUCTION_STAGE",
+    [string]$ViewerRole = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -42,6 +43,15 @@ $putPath = $SourceApp.Replace("\", "/")
 $modulePutPath = $SourceModule.Replace("\", "/")
 $envPutPath = $SourceEnv.Replace("\", "/")
 
+$viewerGrantSql = ""
+if (-not [string]::IsNullOrWhiteSpace($ViewerRole)) {
+    $viewerGrantSql = @"
+GRANT USAGE ON DATABASE $Database TO ROLE $ViewerRole;
+GRANT USAGE ON SCHEMA $Database.$Schema TO ROLE $ViewerRole;
+GRANT USAGE ON STREAMLIT $Database.$Schema.$AppName TO ROLE $ViewerRole;
+"@
+}
+
 $sql = @"
 USE ROLE $Role;
 USE DATABASE $Database;
@@ -73,6 +83,8 @@ CREATE OR REPLACE STREAMLIT $Database.$Schema.$AppName
   QUERY_WAREHOUSE = $Warehouse
   TITLE = 'ReadinessOps Governance Review'
   COMMENT = 'Evidence, AI proposal, human decision, controlled publication, and audit traceability.';
+
+$viewerGrantSql
 
 DESC STREAMLIT $Database.$Schema.$AppName;
 "@
