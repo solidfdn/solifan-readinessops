@@ -178,6 +178,7 @@ def _render_initiative(session, run_id, selected_run):
 
 def _render_evidence_upload(session, run_id):
     st.subheader("Upload evidence")
+    st.caption("Evidence storage build: 2026.08.19.2")
     revision_id = None
     revision_no = None
     revision_status = None
@@ -310,7 +311,7 @@ def _render_evidence_upload(session, run_id):
                     "MERGE INTO EVIDENCE_ORIGINAL_OBJECT target "
                     "USING (SELECT ? AS CONTENT_SHA256, "
                     "TO_BINARY(?, 'BASE64') AS FILE_CONTENT, "
-                    "TRY_TO_NUMBER(?) AS BYTE_COUNT, ? AS MEDIA_TYPE, "
+                    "TRY_TO_NUMBER(TO_VARCHAR(?)) AS BYTE_COUNT, ? AS MEDIA_TYPE, "
                     "? AS FIRST_SOURCE_FILENAME) source "
                     "ON target.CONTENT_SHA256 = source.CONTENT_SHA256 "
                     "WHEN NOT MATCHED THEN INSERT ("
@@ -331,7 +332,7 @@ def _render_evidence_upload(session, run_id):
                     "PARSER_NAME,PAGE_COUNT,UPLOADED_AT,UPLOADED_BY"
                     ") VALUES ("
                     "?, ?, NULL, ?, ?, 'VALIDATED', ?, ?, ?, "
-                    "?, ?, ?, ?, ?, TRY_TO_NUMBER(?), CURRENT_TIMESTAMP(), CURRENT_USER())",
+                    "?, ?, ?, ?, ?, TRY_TO_NUMBER(TO_VARCHAR(?)), CURRENT_TIMESTAMP(), CURRENT_USER())",
                     [
                         ev_id, run_id, uf.name, content, uf.name,
                         source_type, media_type, sha, len(raw), len(content),

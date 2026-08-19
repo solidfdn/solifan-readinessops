@@ -5,7 +5,10 @@ from datetime import datetime
 import pandas as pd
 import streamlit as st
 from snowflake.snowpark.context import get_active_session
-from value_control_plane import render_value_control_plane
+import importlib
+import value_control_plane
+value_control_plane = importlib.reload(value_control_plane)
+render_value_control_plane = value_control_plane.render_value_control_plane
 
 
 # ============================================================
