@@ -21,13 +21,14 @@ ReadinessOps demonstrates that operating lifecycle inside Snowflake while preser
 
 ## Finalist Value Control Plane
 
-The finalist build adds five connected workspaces:
+The finalist build adds six connected workspaces:
 
 1. **Initiative** — create or link an AI Initiative to an Assessment Run
 2. **Evidence** — upload TXT or PDF evidence, retain the original file in a Snowflake stage, and store validated text and metadata
-3. **Decision Pack** — generate exactly four evidence-grounded AI drafts: Governance, Value, Model Routing, and Portfolio
-4. **Published** — inspect only human-approved, explicitly published Governed Decision Records
-5. **Portfolio** — compare initiatives by stage, governance status, value assessment, recommendation, and priority
+3. **Revisions** — preserve published assessment state, add changed Evidence through a Draft Revision, and identify affected decision sections before reassessment
+4. **Decision Pack** — generate exactly four evidence-grounded AI drafts: Governance, Value, Model Routing, and Portfolio
+5. **Published** — inspect only human-approved, explicitly published Governed Decision Records
+6. **Portfolio** — compare initiatives by stage, governance status, value assessment, recommendation, and priority
 
 The Decision Pack workspace also exposes a governed five-step execution trace.
 Human decisions and publication events remain visible in the existing **Audit trail** workspace.
@@ -49,23 +50,29 @@ The model cannot approve its own output and cannot publish directly from generat
 
 ## Product Walkthrough
 
-### 1. Retained TXT/PDF Evidence
+### 1. Governed Revision State
 
-The Value Control Plane retains original TXT/PDF files, parses PDF content with Cortex document intelligence, and records validation metadata.
+The application distinguishes the Draft Revision under review from the immutable published Current State. Evaluators enter directly into the active Draft Revision and its impact-analysis workspace.
 
-![Retained TXT and PDF evidence](assets/screenshots/app_ss_01.png)
+![Draft Revision and published Current State](assets/screenshots/app_ss_01.png)
 
-### 2. Governed Decision Pack Execution
+### 2. Evidence Change Impact Analysis
 
-The generated Governance, Value, Model Routing, and Portfolio sections remain AI drafts until a person reviews each section. Five persisted Run Steps make input validation, context assembly, Cortex generation, output validation, and draft persistence inspectable without adding model calls.
+Only changed Evidence is evaluated against the four published base decisions. The advisory result identifies affected sections, impact level, confidence, and whether reassessment is recommended; it cannot approve or publish anything.
 
-![Governed five-step Decision Pack execution](assets/screenshots/app_ss_02.png)
+![Evidence change impact analysis](assets/screenshots/app_ss_02.png)
 
-### 3. Human Decision and Publication Audit
+### 3. Frozen Before/After Decision Comparison
 
-Approval, rejection, and publication are separate state transitions with actor, timestamp, proposal, and comment traceability.
+Published revisions remain immutable. A frozen comparison makes modified decision content and its cited Evidence inspectable across revisions.
 
-![Human decision and publication audit history](assets/screenshots/app_ss_03.png)
+![Frozen decision comparison across revisions](assets/screenshots/app_ss_03.png)
+
+### 4. Human Decision and Publication Audit
+
+Approval and publication remain separate state transitions. Each event retains the proposal, actor, timestamp, and history record.
+
+![Human approval and publication audit history](assets/screenshots/app_ss_04.png)
 
 ## Architecture
 

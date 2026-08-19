@@ -42,17 +42,29 @@ The existing Gap, Risk, and Action governance workflow remains available and unc
 
 ## Application Screenshots
 
-### Retained TXT/PDF Evidence
+### Governed Revision State
 
-![Retained TXT and PDF evidence](../assets/screenshots/app_ss_01.png)
+The Draft Revision under review is clearly separated from the immutable published Current State.
 
-### Governed Decision Pack Execution
+![Draft Revision and published Current State](../assets/screenshots/app_ss_01.png)
 
-![Governed five-step Decision Pack execution](../assets/screenshots/app_ss_02.png)
+### Evidence Change Impact Analysis
+
+Changed Evidence is evaluated against the four published base decisions, producing an advisory and human-confirmed reassessment scope.
+
+![Evidence change impact analysis](../assets/screenshots/app_ss_02.png)
+
+### Frozen Before/After Decision Comparison
+
+Modified decision content and cited Evidence remain inspectable across published revisions.
+
+![Frozen decision comparison across revisions](../assets/screenshots/app_ss_03.png)
 
 ### Human Decision and Publication Audit
 
-![Human decision and publication audit history](../assets/screenshots/app_ss_03.png)
+Approval and publication remain separate, attributable events.
+
+![Human approval and publication audit history](../assets/screenshots/app_ss_04.png)
 
 ## Finalist Feedback Coverage
 
