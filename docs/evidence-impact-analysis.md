@@ -79,3 +79,11 @@ Published Revision
 | Impact output exists | No proposal, approval, publication, or Current State mutation |
 
 Run `sql/35_evidence_impact_validation.sql`; every `FAIL_COUNT` must be zero.
+
+## Validation result
+
+The 2026-08-19 isolated validation completed with one changed Evidence item,
+four persisted impact items, four `HIGH` impacts, four `REASSESS`
+recommendations, duplicate execution returning `SKIPPED`, and zero failures
+across all seven database integrity checks. See
+[hackathon/REVISION_EVIDENCE_IMPACT_TEST_REPORT.md](hackathon/REVISION_EVIDENCE_IMPACT_TEST_REPORT.md).
