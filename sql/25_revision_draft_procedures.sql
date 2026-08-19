@@ -367,7 +367,7 @@ BEGIN
         INHERITED_FROM_EVIDENCE_ID,
         SNAPSHOT_ROLE,
         CHANGE_SET_ID
-    ) VALUES (
+    ) SELECT
         'RE_' || SHA2(:P_REVISION_ID || '|' || :P_EVIDENCE_ID, 256),
         :P_REVISION_ID,
         :P_EVIDENCE_ID,
