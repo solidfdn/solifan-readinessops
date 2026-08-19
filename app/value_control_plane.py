@@ -6,8 +6,9 @@ evidence, Draft Decision Pack review, Published Governed Records, AI Portfolio.
 """
 
 import hashlib
-import io
 import json
+import os
+import tempfile
 from datetime import datetime
 from uuid import uuid4
 
@@ -252,14 +253,29 @@ def _render_evidence_upload(session, run_id):
             )
             relative_path = f"{run_id}/{ev_id}/{sha}.{extension}"
             stage_path = f"@READINESSOPS_EVIDENCE_STAGE/{relative_path}"
+            stage_prefix = f"@READINESSOPS_EVIDENCE_STAGE/{run_id}/{ev_id}"
 
             try:
-                put_result = session.file.put_stream(
-                    io.BytesIO(raw),
-                    stage_path,
-                    auto_compress=False,
-                    overwrite=True,
-                )
+                # Warehouse-runtime Streamlit can fail inside the connector's
+                # in-memory open_stream path. Materialize the immutable bytes in
+                # the writable /tmp filesystem and use the supported file PUT
+                # path instead. The temporary file is removed automatically.
+                with tempfile.TemporaryDirectory(
+                    prefix="readinessops_evidence_",
+                    dir="/tmp",
+                ) as temp_dir:
+                    local_path = os.path.join(temp_dir, f"{sha}.{extension}")
+                    with open(local_path, "wb") as local_file:
+                        local_file.write(raw)
+                    put_results = session.file.put(
+                        local_path,
+                        stage_prefix,
+                        auto_compress=False,
+                        overwrite=True,
+                    )
+                if not put_results:
+                    raise RuntimeError("PUT returned no result")
+                put_result = put_results[0]
                 put_status = _text(getattr(put_result, "status", ""), "")
                 if put_status and put_status not in {"UPLOADED", "SKIPPED"}:
                     raise RuntimeError(f"Unexpected PUT status: {put_status}")
