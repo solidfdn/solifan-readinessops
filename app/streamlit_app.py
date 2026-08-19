@@ -294,114 +294,107 @@ st.markdown(
 
 
 # ============================================================
-# Load assessment run and governance state
+# Load the governed assessment context
 # ============================================================
 try:
-    runs_df = query_df(
+    assessment_context_df = query_df(
         """
-        WITH run_catalog AS (
+        WITH case_catalog AS (
             SELECT
-                assessment_run.RUN_ID,
-                assessment_run.RUN_NAME,
-                REGEXP_REPLACE(
-                    assessment_run.RUN_NAME,
-                    ' - Revision [0-9]+$',
-                    ''
-                ) AS ASSESSMENT_NAME,
-                assessment_run.STATUS,
-                assessment_run.ORGANIZATION_NAME,
-                assessment_run.CREATED_AT,
-                revision.REVISION_NO,
-                CASE
-                    WHEN case_record.CURRENT_REVISION_ID = revision.REVISION_ID
-                        THEN 'CURRENT'
-                    WHEN case_record.ACTIVE_DRAFT_REVISION_ID = revision.REVISION_ID
-                        THEN 'DRAFT'
-                    WHEN revision.REVISION_ID IS NOT NULL
-                        THEN 'HISTORY'
-                    ELSE 'STANDALONE'
-                END AS RUN_ROLE
-            FROM ASSESSMENT_RUNS assessment_run
-            LEFT JOIN ASSESSMENT_REVISION revision
-              ON revision.RUN_ID = assessment_run.RUN_ID
-            LEFT JOIN ASSESSMENT_CASE case_record
-              ON case_record.CASE_ID = revision.CASE_ID
+                case_record.CASE_ID,
+                current_revision.REVISION_NO AS CURRENT_REVISION_NO,
+                current_revision.STATUS AS CURRENT_REVISION_STATUS,
+                current_run.RUN_ID AS CURRENT_RUN_ID,
+                current_run.RUN_NAME AS CURRENT_RUN_NAME,
+                current_run.ORGANIZATION_NAME AS CURRENT_ORGANIZATION_NAME,
+                current_run.CREATED_AT AS CURRENT_CREATED_AT,
+                draft_revision.REVISION_NO AS DRAFT_REVISION_NO,
+                draft_revision.STATUS AS DRAFT_REVISION_STATUS,
+                draft_run.RUN_ID AS DRAFT_RUN_ID,
+                draft_run.RUN_NAME AS DRAFT_RUN_NAME,
+                draft_run.ORGANIZATION_NAME AS DRAFT_ORGANIZATION_NAME,
+                draft_run.STATUS AS DRAFT_RUN_STATUS,
+                draft_run.CREATED_AT AS DRAFT_CREATED_AT
+            FROM ASSESSMENT_CASE case_record
+            LEFT JOIN ASSESSMENT_REVISION current_revision
+              ON current_revision.REVISION_ID = case_record.CURRENT_REVISION_ID
+            LEFT JOIN ASSESSMENT_RUNS current_run
+              ON current_run.RUN_ID = current_revision.RUN_ID
+            LEFT JOIN ASSESSMENT_REVISION draft_revision
+              ON draft_revision.REVISION_ID = case_record.ACTIVE_DRAFT_REVISION_ID
+            LEFT JOIN ASSESSMENT_RUNS draft_run
+              ON draft_run.RUN_ID = draft_revision.RUN_ID
         )
         SELECT
-            RUN_ID,
-            RUN_NAME,
-            ASSESSMENT_NAME,
-            STATUS,
-            ORGANIZATION_NAME,
-            CREATED_AT,
-            REVISION_NO,
-            RUN_ROLE
-        FROM run_catalog
+            CASE_ID,
+            COALESCE(DRAFT_RUN_ID, CURRENT_RUN_ID) AS SELECTED_RUN_ID,
+            REGEXP_REPLACE(
+                COALESCE(DRAFT_RUN_NAME, CURRENT_RUN_NAME),
+                ' - Revision [0-9]+$',
+                ''
+            ) AS ASSESSMENT_NAME,
+            COALESCE(
+                DRAFT_ORGANIZATION_NAME,
+                CURRENT_ORGANIZATION_NAME
+            ) AS ORGANIZATION_NAME,
+            CURRENT_REVISION_NO,
+            CURRENT_REVISION_STATUS,
+            CURRENT_RUN_ID,
+            DRAFT_REVISION_NO,
+            DRAFT_REVISION_STATUS,
+            DRAFT_RUN_STATUS,
+            DRAFT_RUN_ID
+        FROM case_catalog
+        WHERE COALESCE(DRAFT_RUN_ID, CURRENT_RUN_ID) IS NOT NULL
         ORDER BY
-            CASE RUN_ROLE
-                WHEN 'CURRENT' THEN 1
-                WHEN 'DRAFT' THEN 2
-                WHEN 'STANDALONE' THEN 3
-                WHEN 'HISTORY' THEN 4
-                ELSE 5
-            END,
-            REVISION_NO DESC NULLS LAST,
-            CREATED_AT DESC
+            IFF(DRAFT_RUN_ID IS NOT NULL, 1, 2),
+            COALESCE(DRAFT_CREATED_AT, CURRENT_CREATED_AT) DESC
+        LIMIT 1
         """
     )
 except Exception as exc:
-    st.error(f"Could not load assessment runs: {exc}")
+    st.error(f"Could not load the governed assessment: {exc}")
     st.stop()
 
-if runs_df.empty:
-    st.warning("No assessment runs are available.")
+if assessment_context_df.empty:
+    st.warning("No governed assessment is available.")
     st.stop()
 
-show_other_runs = st.checkbox(
-    "Show historical and standalone runs",
-    value=False,
-    help=(
-        "Current and Draft Revisions are shown by default. Enable this only "
-        "when inspecting historical or pre-Revision Assessment Runs."
-    ),
-)
-visible_runs_df = runs_df[
-    runs_df["RUN_ROLE"].isin(["CURRENT", "DRAFT"])
-].copy()
-if show_other_runs or visible_runs_df.empty:
-    visible_runs_df = runs_df.copy()
-
-run_options = {}
-for _, run_row in visible_runs_df.iterrows():
-    role = text(run_row["RUN_ROLE"], "STANDALONE")
-    assessment_name = text(
-        run_row["ASSESSMENT_NAME"],
-        text(run_row["RUN_NAME"], text(run_row["RUN_ID"])),
-    )
-    revision_no = run_row.get("REVISION_NO")
-    revision_label = (
-        f" | Revision {integer(revision_no)}"
-        if revision_no is not None and pd.notna(revision_no)
-        else ""
-    )
-    label = (
-        f"{role} | {assessment_name}{revision_label}"
-        f" | {text(run_row['ORGANIZATION_NAME'], 'Organization not set')}"
-        f" | {text(run_row['STATUS'])}"
-    )
-    run_options[label] = text(run_row["RUN_ID"])
-
-selected_label = st.selectbox(
-    "Assessment Run",
-    options=list(run_options.keys()),
-    help=(
-        "CURRENT is the published operating state. DRAFT is pending work. "
-        "HISTORY and STANDALONE remain available for traceability."
-    ),
-)
-selected_run_id = run_options[selected_label]
+assessment_context = assessment_context_df.iloc[0]
+selected_run_id = text(assessment_context["SELECTED_RUN_ID"])
 run_id_sql = sql_literal(selected_run_id)
-selected_run = runs_df[runs_df["RUN_ID"].astype(str) == selected_run_id].iloc[0]
+
+assessment_name = text(
+    assessment_context["ASSESSMENT_NAME"],
+    "Governed AI assessment",
+)
+organization_name = text(
+    assessment_context["ORGANIZATION_NAME"],
+    "Organization not set",
+)
+current_revision_no = assessment_context.get("CURRENT_REVISION_NO")
+draft_revision_no = assessment_context.get("DRAFT_REVISION_NO")
+has_active_draft = (
+    draft_revision_no is not None
+    and pd.notna(draft_revision_no)
+    and text(assessment_context.get("DRAFT_RUN_ID"), "") != ""
+)
+
+st.caption("Assessment")
+st.markdown(f"**{assessment_name}**")
+st.caption(f"Organization: {organization_name}")
+
+if has_active_draft:
+    st.info(
+        f"Reviewing Revision {integer(draft_revision_no)} (Draft). "
+        f"Revision {integer(current_revision_no)} remains the published "
+        "current state."
+    )
+else:
+    st.success(
+        f"Revision {integer(current_revision_no)} is the published current "
+        "state. No Draft Revision is active."
+    )
 
 try:
     latest_attempt_df = query_df(
