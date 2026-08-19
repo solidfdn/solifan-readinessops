@@ -158,9 +158,32 @@ sql/12_review_procedure.sql
 sql/13_publish_procedure.sql
 sql/14_dashboard_view_update.sql
 sql/20_foundation_slice_1.sql
+sql/21_revision_lifecycle_foundation.sql
+sql/24_revision_1_migration.sql
+sql/25_revision_draft_procedures.sql
+sql/27_evidence_binary_storage.sql
+sql/29_register_revision_evidence_procedure.sql
+sql/30_revision_publication_procedure.sql
+sql/32_create_revision_procedure.sql
 ```
 
 `sql/20_foundation_slice_1.sql` is idempotent and adds the Value Control Plane objects while preserving existing Gap, Risk, and Action behavior.
+
+Run the read-only Revision checks after deployment:
+
+```text
+sql/22_revision_lifecycle_validation.sql
+sql/26_revision_draft_validation.sql
+sql/28_evidence_binary_storage_validation.sql
+sql/31_revision_release_validation.sql
+```
+
+The Revision lifecycle keeps the published Current State immutable, creates a
+separate Draft Run with inherited answers and Evidence, records frozen
+before/after comparisons, and advances Current State only after explicit
+publication. The Value Control Plane **Revisions** section exposes the timeline,
+Evidence lineage, change types, reasons, source Evidence, and before/after
+payloads without requiring SQL access.
 
 ### Deploy the Streamlit app
 
@@ -171,7 +194,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File '.\scripts\deploy_production_dashboard.ps1' `
   -ConnectionName '<SNOWFLAKE_CLI_CONNECTION>' `
   -Database 'READINESSOPS_VALIDATION' `
-  -Schema 'APP'
+  -Schema 'APP' `
+  -ViewerRole 'READINESSOPS_EVALUATOR'
 ```
 
 The script uploads:
@@ -181,6 +205,8 @@ The script uploads:
 - `app/streamlit_app.py`
 
 It then recreates `READINESSOPS_VALIDATION.APP.READINESSOPS_DASHBOARD`. The Streamlit runtime is pinned to `1.35.0`.
+When `ViewerRole` is supplied, the script restores the required Database,
+Schema, and Streamlit `USAGE` grants after `CREATE OR REPLACE`.
 
 ## Finalist E2E Flow
 
@@ -238,8 +264,10 @@ solifan-readinessops/
 ├── scripts/
 │   └── deploy_production_dashboard.ps1
 └── sql/
-    ├── 01_setup.sql ... 18_hackathon_final_validation.sql
-    └── 20_foundation_slice_1.sql
+    ├── 01_setup.sql ... 20_foundation_slice_1.sql
+    ├── 21_revision_lifecycle_foundation.sql ... 30_revision_publication_procedure.sql
+    ├── 31_revision_release_validation.sql
+    └── 32_create_revision_procedure.sql
 ```
 
 ## Current Limitations

@@ -5,6 +5,7 @@ renders the complete Decision Pack workspace: AI Initiative, retained TXT/PDF
 evidence, Draft Decision Pack review, Published Governed Records, AI Portfolio.
 """
 
+import base64
 import hashlib
 import io
 import json
@@ -13,6 +14,7 @@ from uuid import uuid4
 
 import pandas as pd
 import streamlit as st
+from pypdf import PdfReader
 
 
 # -- Helpers ------------------------------------------------------------------
@@ -176,12 +178,49 @@ def _render_initiative(session, run_id, selected_run):
 
 def _render_evidence_upload(session, run_id):
     st.subheader("Upload evidence")
-    files = st.file_uploader(
-        "Upload .txt or .pdf files",
-        type=["txt", "pdf"],
-        accept_multiple_files=True,
-        key="vcp_txt_up",
+    st.caption("Evidence storage build: 2026.08.19.2")
+    revision_id = None
+    revision_no = None
+    revision_status = None
+    try:
+        revision_df = _query(
+            session,
+            "SELECT revision.REVISION_ID, revision.REVISION_NO, revision.STATUS, "
+            "IFF(case_record.ACTIVE_DRAFT_REVISION_ID = revision.REVISION_ID, TRUE, FALSE) "
+            "AS IS_ACTIVE_DRAFT "
+            "FROM ASSESSMENT_REVISION revision "
+            "JOIN ASSESSMENT_CASE case_record ON case_record.CASE_ID = revision.CASE_ID "
+            "WHERE revision.RUN_ID = ?",
+            [run_id],
+        )
+        if not revision_df.empty:
+            revision_id = _text(revision_df.iloc[0]["REVISION_ID"], "")
+            revision_no = _integer(revision_df.iloc[0]["REVISION_NO"])
+            revision_status = _text(revision_df.iloc[0]["STATUS"], "")
+            is_active_draft = bool(revision_df.iloc[0]["IS_ACTIVE_DRAFT"])
+            if is_active_draft and revision_status in {"DRAFT", "FAILED"}:
+                st.caption(
+                    f"Revision {revision_no} · Draft · New files remain pending until reassessment and publication."
+                )
+            else:
+                st.info(
+                    f"Revision {revision_no} is {revision_status}. "
+                    "Select its active Draft Revision to add evidence."
+                )
+    except Exception:
+        is_active_draft = True
+
+    upload_enabled = revision_id is None or (
+        is_active_draft and revision_status in {"DRAFT", "FAILED"}
     )
+    files = None
+    if upload_enabled:
+        files = st.file_uploader(
+            "Upload .txt or .pdf files",
+            type=["txt", "pdf"],
+            accept_multiple_files=True,
+            key="vcp_txt_up",
+        )
 
     if files:
         for uf in files:
@@ -192,6 +231,7 @@ def _render_evidence_upload(session, run_id):
             if not raw:
                 st.error(f"**{uf.name}**: Empty.")
                 continue
+
             if len(raw) > 20_000_000:
                 st.error(f"**{uf.name}**: Exceeds 20 MB.")
                 continue
@@ -214,19 +254,10 @@ def _render_evidence_upload(session, run_id):
                 f"EV_{extension.upper()}_"
                 f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{sha[:8]}"
             )
-            relative_path = f"{run_id}/{ev_id}/{sha}.{extension}"
-            stage_path = f"@READINESSOPS_EVIDENCE_STAGE/{relative_path}"
-
-            try:
-                session.file.put_stream(
-                    io.BytesIO(raw),
-                    stage_path,
-                    auto_compress=False,
-                    overwrite=False,
-                )
-            except Exception:
-                st.error(f"**{uf.name}**: Original file storage failed.")
-                continue
+            storage_path = (
+                "SNOWFLAKE_BINARY://EVIDENCE_ORIGINAL_OBJECT/"
+                f"{sha}"
+            )
 
             if extension == "txt":
                 try:
@@ -250,58 +281,107 @@ def _render_evidence_upload(session, run_id):
 
             elif extension == "pdf":
                 try:
-                    parsed_df = _query(
-                        session,
-                        "SELECT "
-                        "PARSED:value:content::VARCHAR AS CONTENT, "
-                        "PARSED:error::VARCHAR AS ERROR, "
-                        "PARSED:metadata:pageCount::NUMBER AS PAGE_COUNT "
-                        "FROM (SELECT AI_PARSE_DOCUMENT("
-                        "TO_FILE('@READINESSOPS_EVIDENCE_STAGE', ?), "
-                        "{'mode': 'LAYOUT'}, TRUE) AS PARSED)",
-                        [relative_path],
+                    reader = PdfReader(io.BytesIO(raw))
+                    page_count = len(reader.pages)
+                    content = "\n\n".join(
+                        page.extract_text() or "" for page in reader.pages
                     )
-                    if parsed_df.empty:
-                        st.error(f"**{uf.name}**: PDF parsing returned no result.")
-                        continue
-                    parse_error = _text(parsed_df.iloc[0]["ERROR"], "")
-                    content = _text(parsed_df.iloc[0]["CONTENT"], "")
-                    page_count = _integer(parsed_df.iloc[0]["PAGE_COUNT"])
-                    if parse_error:
-                        st.error(f"**{uf.name}**: PDF parsing failed.")
-                        continue
                     if not content.strip():
                         st.error(f"**{uf.name}**: No text extracted from PDF.")
                         continue
-                except Exception:
-                    st.error(f"**{uf.name}**: PDF parsing failed.")
+                except Exception as exc:
+                    detail = str(exc).replace("\n", " ")[:300]
+                    st.error(
+                        f"**{uf.name}**: PDF parsing failed "
+                        f"({type(exc).__name__}: {detail})."
+                    )
                     continue
 
                 source_type = "UPLOADED_PDF"
                 media_type = "application/pdf"
-                parser_name = "AI_PARSE_DOCUMENT_LAYOUT"
+                parser_name = "PYPDF_TEXT"
 
             else:
                 st.error(f"**{uf.name}**: Unsupported file type.")
                 continue
 
-            _execute(
-                session,
-                "INSERT INTO EVIDENCE_ITEMS ("
-                "EVIDENCE_ID,RUN_ID,QUESTION_ID,"
-                "EVIDENCE_TITLE,EVIDENCE_TEXT,EVIDENCE_STATUS,"
-                "SOURCE_FILENAME,SOURCE_TYPE,MEDIA_TYPE,"
-                "CONTENT_SHA256,BYTE_COUNT,CHAR_COUNT,STAGE_PATH,"
-                "PARSER_NAME,PAGE_COUNT,UPLOADED_AT,UPLOADED_BY"
-                ") VALUES ("
-                "?, ?, NULL, ?, ?, 'VALIDATED', ?, ?, ?, "
-                "?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP(), CURRENT_USER())",
-                [
-                    ev_id, run_id, uf.name, content, uf.name,
-                    source_type, media_type, sha, len(raw), len(content),
-                    stage_path, parser_name, page_count,
-                ],
-            )
+            try:
+                encoded_original = base64.b64encode(raw).decode("ascii")
+                _execute(
+                    session,
+                    "MERGE INTO EVIDENCE_ORIGINAL_OBJECT target "
+                    "USING (SELECT ? AS CONTENT_SHA256, "
+                    "TO_BINARY(?, 'BASE64') AS FILE_CONTENT, "
+                    "TRY_TO_NUMBER(TO_VARCHAR(?)) AS BYTE_COUNT, ? AS MEDIA_TYPE, "
+                    "? AS FIRST_SOURCE_FILENAME) source "
+                    "ON target.CONTENT_SHA256 = source.CONTENT_SHA256 "
+                    "WHEN NOT MATCHED THEN INSERT ("
+                    "CONTENT_SHA256,FILE_CONTENT,BYTE_COUNT,MEDIA_TYPE,"
+                    "FIRST_SOURCE_FILENAME,CREATED_AT,CREATED_BY"
+                    ") VALUES (source.CONTENT_SHA256,source.FILE_CONTENT,"
+                    "source.BYTE_COUNT,source.MEDIA_TYPE,"
+                    "source.FIRST_SOURCE_FILENAME,CURRENT_TIMESTAMP(),CURRENT_USER())",
+                    [sha, encoded_original, len(raw), media_type, uf.name],
+                )
+                _execute(
+                    session,
+                    "INSERT INTO EVIDENCE_ITEMS ("
+                    "EVIDENCE_ID,RUN_ID,QUESTION_ID,"
+                    "EVIDENCE_TITLE,EVIDENCE_TEXT,EVIDENCE_STATUS,"
+                    "SOURCE_FILENAME,SOURCE_TYPE,MEDIA_TYPE,"
+                    "CONTENT_SHA256,BYTE_COUNT,CHAR_COUNT,STAGE_PATH,"
+                    "PARSER_NAME,PAGE_COUNT,UPLOADED_AT,UPLOADED_BY"
+                    ") VALUES ("
+                    "?, ?, NULL, ?, ?, 'VALIDATED', ?, ?, ?, "
+                    "?, ?, ?, ?, ?, TRY_TO_NUMBER(TO_VARCHAR(?)), CURRENT_TIMESTAMP(), CURRENT_USER())",
+                    [
+                        ev_id, run_id, uf.name, content, uf.name,
+                        source_type, media_type, sha, len(raw), len(content),
+                        storage_path, parser_name, page_count,
+                    ],
+                )
+            except Exception as exc:
+                _execute(
+                    session,
+                    "DELETE FROM EVIDENCE_ORIGINAL_OBJECT "
+                    "WHERE CONTENT_SHA256 = ? "
+                    "AND NOT EXISTS (SELECT 1 FROM EVIDENCE_ITEMS evidence "
+                    "WHERE evidence.CONTENT_SHA256 = "
+                    "EVIDENCE_ORIGINAL_OBJECT.CONTENT_SHA256)",
+                    [sha],
+                )
+                detail = str(exc).replace("\n", " ")[:400]
+                st.error(
+                    f"**{uf.name}**: Snowflake original storage failed "
+                    f"({type(exc).__name__}: {detail})"
+                )
+                continue
+            if revision_id:
+                registration = _call_json(
+                    session,
+                    "CALL SP_REGISTER_REVISION_EVIDENCE(?, ?, NULL)",
+                    [revision_id, ev_id],
+                )
+                if registration.get("status") != "OK":
+                    _execute(
+                        session,
+                        "DELETE FROM EVIDENCE_ITEMS WHERE EVIDENCE_ID = ? AND RUN_ID = ?",
+                        [ev_id, run_id],
+                    )
+                    _execute(
+                        session,
+                        "DELETE FROM EVIDENCE_ORIGINAL_OBJECT "
+                        "WHERE CONTENT_SHA256 = ? "
+                        "AND NOT EXISTS (SELECT 1 FROM EVIDENCE_ITEMS evidence "
+                        "WHERE evidence.CONTENT_SHA256 = "
+                        "EVIDENCE_ORIGINAL_OBJECT.CONTENT_SHA256)",
+                        [sha],
+                    )
+                    st.error(
+                        f"**{uf.name}**: Revision registration failed: "
+                        f"{registration.get('error', 'Unknown error')}"
+                    )
+                    continue
             st.success(
                 f"**{uf.name}** stored, parsed, and validated "
                 f"({len(content):,} chars)"
@@ -310,12 +390,18 @@ def _render_evidence_upload(session, run_id):
     try:
         ev_df = _query(
             session,
-            "SELECT EVIDENCE_ID,SOURCE_FILENAME,SOURCE_TYPE,CHAR_COUNT,"
-            "PAGE_COUNT,PARSER_NAME,STAGE_PATH,EVIDENCE_STATUS,UPLOADED_AT "
-            "FROM EVIDENCE_ITEMS "
-            "WHERE RUN_ID = ? "
+            "SELECT evidence.EVIDENCE_ID,evidence.SOURCE_FILENAME,evidence.SOURCE_TYPE,"
+            "evidence.CHAR_COUNT,evidence.PAGE_COUNT,evidence.PARSER_NAME,"
+            "evidence.STAGE_PATH,evidence.EVIDENCE_STATUS,evidence.UPLOADED_AT,"
+            "COALESCE(lineage.SNAPSHOT_ROLE, 'LEGACY') AS REVISION_ROLE "
+            "FROM EVIDENCE_ITEMS evidence "
+            "LEFT JOIN ASSESSMENT_REVISION revision ON revision.RUN_ID = evidence.RUN_ID "
+            "LEFT JOIN ASSESSMENT_REVISION_EVIDENCE lineage "
+            "ON lineage.REVISION_ID = revision.REVISION_ID "
+            "AND lineage.EVIDENCE_ID = evidence.EVIDENCE_ID "
+            "WHERE evidence.RUN_ID = ? "
             "AND SOURCE_TYPE IN ('UPLOADED_TXT', 'UPLOADED_PDF') "
-            "ORDER BY UPLOADED_AT DESC",
+            "ORDER BY evidence.UPLOADED_AT DESC",
             [run_id],
         )
         if not ev_df.empty:
@@ -330,9 +416,183 @@ def _render_evidence_upload(session, run_id):
                 "STAGE_PATH": "Stored path",
                 "EVIDENCE_STATUS": "Status",
                 "UPLOADED_AT": "Uploaded",
+                "REVISION_ROLE": "Revision role",
             }))
     except Exception:
         pass
+
+
+def _render_revision_history(session, run_id):
+    """Show immutable Revision history and the frozen before/after comparison."""
+    st.subheader("Revision history and comparison")
+    st.caption(
+        "Published Revisions remain immutable. Draft changes become Current State only "
+        "after human approval and explicit publication."
+    )
+
+    try:
+        selected_revision = _query(
+            session,
+            "SELECT CASE_ID FROM ASSESSMENT_REVISION WHERE RUN_ID = ?",
+            [run_id],
+        )
+    except Exception as exc:
+        st.warning(f"Revision history is not available: {exc}")
+        return
+
+    if selected_revision.empty:
+        st.info("This assessment predates Revision tracking.")
+        return
+
+    case_id = _text(selected_revision.iloc[0]["CASE_ID"], "")
+    try:
+        current = _query(
+            session,
+            "SELECT CASE_NAME,CURRENT_REVISION_NO,CURRENT_RUN_ID,DRAFT_REVISION_NO,"
+            "DRAFT_STATUS,HAS_PENDING_CHANGES FROM V_ASSESSMENT_CASE_CURRENT "
+            "WHERE CASE_ID = ?",
+            [case_id],
+        )
+        history = _query(
+            session,
+            "SELECT REVISION_NO,STATUS,RUN_ID,CHANGE_REASON,IS_CURRENT,IS_ACTIVE_DRAFT,"
+            "CREATED_BY,CREATED_AT,PUBLISHED_BY,PUBLISHED_AT "
+            "FROM V_ASSESSMENT_REVISION_HISTORY WHERE CASE_ID = ? "
+            "ORDER BY REVISION_NO DESC",
+            [case_id],
+        )
+        comparison = _query(
+            session,
+            "SELECT FROM_REVISION_NO,TO_REVISION_NO,DELTA_ID,ENTITY_TYPE,LOGICAL_ITEM_ID,"
+            "CHANGE_TYPE,CHANGE_REASON,SOURCE_EVIDENCE_IDS,BEFORE_PAYLOAD,AFTER_PAYLOAD "
+            "FROM V_ASSESSMENT_REVISION_COMPARISON WHERE CASE_ID = ? "
+            "ORDER BY TO_REVISION_NO DESC,ENTITY_TYPE,LOGICAL_ITEM_ID",
+            [case_id],
+        )
+        evidence = _query(
+            session,
+            "SELECT revision.REVISION_NO,lineage.SNAPSHOT_ROLE,evidence.SOURCE_FILENAME,"
+            "lineage.EVIDENCE_ID,lineage.ORIGIN_EVIDENCE_ID,"
+            "lineage.INHERITED_FROM_EVIDENCE_ID "
+            "FROM ASSESSMENT_REVISION_EVIDENCE lineage "
+            "JOIN ASSESSMENT_REVISION revision "
+            "ON revision.REVISION_ID = lineage.REVISION_ID "
+            "JOIN EVIDENCE_ITEMS evidence ON evidence.EVIDENCE_ID = lineage.EVIDENCE_ID "
+            "WHERE revision.CASE_ID = ? "
+            "ORDER BY revision.REVISION_NO DESC,lineage.SNAPSHOT_ROLE,evidence.SOURCE_FILENAME",
+            [case_id],
+        )
+    except Exception as exc:
+        st.warning(f"Revision comparison could not be loaded: {exc}")
+        return
+
+    if current.empty:
+        st.info("Current Revision is not available.")
+        return
+
+    state = current.iloc[0]
+    current_no = _integer(state.get("CURRENT_REVISION_NO"))
+    draft_no = _text(state.get("DRAFT_REVISION_NO"), "None")
+    pending = bool(state.get("HAS_PENDING_CHANGES"))
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Current Revision", current_no)
+    m2.metric("Recorded Revisions", len(history))
+    m3.metric("Active Draft", draft_no)
+    m4.metric("Pending changes", "Yes" if pending else "No")
+
+    st.markdown("**Revision timeline**")
+    timeline = history.copy()
+    timeline["ROLE"] = timeline.apply(
+        lambda row: "CURRENT" if bool(row["IS_CURRENT"]) else (
+            "DRAFT" if bool(row["IS_ACTIVE_DRAFT"]) else "HISTORY"
+        ),
+        axis=1,
+    )
+    _show_df(timeline[[
+        "REVISION_NO", "ROLE", "STATUS", "RUN_ID", "CHANGE_REASON",
+        "PUBLISHED_BY", "PUBLISHED_AT",
+    ]].rename(columns={
+        "REVISION_NO": "Revision",
+        "STATUS": "Status",
+        "RUN_ID": "Assessment Run",
+        "CHANGE_REASON": "Change reason",
+        "PUBLISHED_BY": "Published by",
+        "PUBLISHED_AT": "Published at",
+    }))
+
+    st.markdown("**Evidence by Revision**")
+    if evidence.empty:
+        st.info("No Revision-linked Evidence is available.")
+    else:
+        _show_df(evidence.rename(columns={
+            "REVISION_NO": "Revision",
+            "SNAPSHOT_ROLE": "Revision role",
+            "SOURCE_FILENAME": "File",
+            "EVIDENCE_ID": "Evidence ID",
+            "ORIGIN_EVIDENCE_ID": "Origin Evidence",
+            "INHERITED_FROM_EVIDENCE_ID": "Inherited from",
+        }))
+
+    st.markdown("**Frozen decision comparison**")
+    if comparison.empty:
+        st.info("No before/after comparison has been recorded yet.")
+        return
+
+    transitions = comparison[["FROM_REVISION_NO", "TO_REVISION_NO"]].drop_duplicates()
+    transition_options = {
+        f"Revision {_integer(row['FROM_REVISION_NO'])} → "
+        f"Revision {_integer(row['TO_REVISION_NO'])}": (
+            row["FROM_REVISION_NO"], row["TO_REVISION_NO"]
+        )
+        for _, row in transitions.iterrows()
+    }
+    selected_label = st.selectbox(
+        "Comparison",
+        list(transition_options.keys()),
+        key=f"vcp_revision_comparison_{case_id}",
+    )
+    from_no, to_no = transition_options[selected_label]
+    selected = comparison[
+        (comparison["FROM_REVISION_NO"] == from_no)
+        & (comparison["TO_REVISION_NO"] == to_no)
+    ].copy()
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Compared items", len(selected))
+    c2.metric("Modified", _integer((selected["CHANGE_TYPE"].astype(str) == "MODIFIED").sum()))
+    c3.metric("New", _integer((selected["CHANGE_TYPE"].astype(str) == "NEW").sum()))
+    c4.metric("Resolved", _integer((selected["CHANGE_TYPE"].astype(str) == "RESOLVED").sum()))
+
+    summary = selected[[
+        "ENTITY_TYPE", "LOGICAL_ITEM_ID", "CHANGE_TYPE", "CHANGE_REASON",
+        "SOURCE_EVIDENCE_IDS",
+    ]].rename(columns={
+        "ENTITY_TYPE": "Entity",
+        "LOGICAL_ITEM_ID": "Logical item",
+        "CHANGE_TYPE": "Change",
+        "CHANGE_REASON": "Reason",
+        "SOURCE_EVIDENCE_IDS": "Source Evidence",
+    })
+    _show_df(summary)
+
+    detail_options = {
+        f"{_text(row['ENTITY_TYPE'])} · {_text(row['LOGICAL_ITEM_ID'])} · "
+        f"{_text(row['CHANGE_TYPE'])}": row
+        for _, row in selected.iterrows()
+    }
+    selected_detail = st.selectbox(
+        "Comparison detail",
+        list(detail_options.keys()),
+        key=f"vcp_revision_detail_{case_id}_{_integer(to_no)}",
+    )
+    detail = detail_options[selected_detail]
+    before_col, after_col = st.columns(2)
+    with before_col:
+        st.markdown("**Before**")
+        st.json(detail["BEFORE_PAYLOAD"] or {})
+    with after_col:
+        st.markdown("**After**")
+        st.json(detail["AFTER_PAYLOAD"] or {})
 
 def _render_generate_dp(session, run_id):
     st.subheader("Generate Decision Pack")
@@ -690,13 +950,15 @@ def render_value_control_plane(session, assessment_run_id: str, actor: str) -> N
 
     vcp_tab = st.radio(
         "Section",
-        ["Initiative", "Evidence", "Decision Pack", "Published", "Portfolio"],
+        ["Initiative", "Evidence", "Revisions", "Decision Pack", "Published", "Portfolio"],
         horizontal=True, key="vcp_section_nav")
 
     if vcp_tab == "Initiative":
         _render_initiative(session, assessment_run_id, run_row)
     elif vcp_tab == "Evidence":
         _render_evidence_upload(session, assessment_run_id)
+    elif vcp_tab == "Revisions":
+        _render_revision_history(session, assessment_run_id)
     elif vcp_tab == "Decision Pack":
         if _text(run_row.get("INITIATIVE_ID"), ""):
             _render_generate_dp(session, assessment_run_id)

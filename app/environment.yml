@@ -4,3 +4,4 @@ channels:
 dependencies:
   - snowflake-snowpark-python
   - streamlit=1.35.0
+  - pypdf
