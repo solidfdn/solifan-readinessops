@@ -127,7 +127,7 @@ Approval and publication remain separate, attributable events.
 | Legacy Gap/Risk/Action preservation | Complete |
 | Production Streamlit deployment | Complete |
 | Isolated E2E validation | Complete |
-| Evidence-difference impact analysis | Implemented; independent E2E validation required before release |
+| Evidence-difference impact analysis | Complete; independently validated against a changed-Evidence Draft Revision |
 
 ## Technical Control Boundary
 
@@ -161,6 +161,14 @@ The isolated `RUN_FINALIST_E2E_001` test confirmed:
 | Proposal leakage into `RUN_001` | 0 |
 | Existing `RUN_001` retained | Passed |
 | Production dashboard deployment | Passed |
+| Changed Evidence detected | Passed (1 item) |
+| Published decision sections evaluated | Passed (4 of 4) |
+| High-impact / reassessment results | Passed (4 / 4) |
+| Duplicate impact execution prevention | Passed (`SKIPPED`) |
+| Evidence-impact integrity checks | Passed (7 checks, 0 failures) |
+
+Detailed validation evidence is recorded in
+[hackathon/REVISION_EVIDENCE_IMPACT_TEST_REPORT.md](hackathon/REVISION_EVIDENCE_IMPACT_TEST_REPORT.md).
 
 ## Safety and Compatibility
 

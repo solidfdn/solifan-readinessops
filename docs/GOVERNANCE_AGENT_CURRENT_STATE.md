@@ -2,34 +2,42 @@
 
 ## Status
 
-The governed ReadinessOps workflow is implemented, deployed as `READINESSOPS_DASHBOARD`, committed to `main`, and validated in `READINESSOPS_VALIDATION.APP`.
+The governed ReadinessOps workflow is implemented, committed to `main`, and
+deployed for evaluator use as
+`READINESSOPS_REVISION_DEV.APP.READINESSOPS_REVISION_DASHBOARD`.
+
+The earlier baseline remains available as
+`READINESSOPS_VALIDATION.APP.READINESSOPS_DASHBOARD`; it does not contain the
+complete Revision and changed-Evidence evaluation path.
 
 The earlier `SP_RUN_READINESS_AGENT` direct-write prototype remains in the repository for historical comparison. It is not the governed production path.
 
 ## Current Operating Flow
 
 ```text
-ASSESSMENT_RUNS
-+ READINESS_QUESTIONS
-+ ASSESSMENT_ANSWERS
-+ EVIDENCE_ITEMS
+ASSESSMENT_CASE + ASSESSMENT_REVISION
         ↓
-SP_RUN_FULL_GOVERNANCE_REVIEW
-        ↓
-GOVERNANCE_AGENT_RUN
-GOVERNANCE_AGENT_PROPOSAL
-GOVERNANCE_AGENT_PROPOSAL_SOURCE
-        ↓
-Human review in Streamlit
-        ↓
-APPROVED or REJECTED
-        ↓
-SP_PUBLISH_AGENT_RUN
-        ↓
-READINESS_GAPS
-RECOMMENDED_ACTIONS
-        ↓
-V_READINESSOPS_ACTION_BOARD
+ASSESSMENT_RUNS + Questions + Answers + Evidence
+        ├─ SP_RUN_FULL_GOVERNANCE_REVIEW
+        │      → Gap / Risk / Action drafts
+        └─ SP_GENERATE_DECISION_PACK
+               → Governance / Value / Routing / Portfolio drafts
+                       ↓
+               Human review in Streamlit
+                       ↓
+               APPROVED or REJECTED
+                       ↓
+               SP_PUBLISH_AGENT_RUN
+                       ↓
+               READINESS_GAPS / RECOMMENDED_ACTIONS
+               / GOVERNED_DECISION_RECORD
+                       ↓
+               Published / Portfolio / Audit
+
+Draft Revision + ADDED / REPLACED Evidence
+        → SP_ANALYZE_REVISION_EVIDENCE_IMPACT
+        → Advisory impact result
+        → Human reassessment decision
 ```
 
 ## Proposal Types
@@ -37,6 +45,10 @@ V_READINESSOPS_ACTION_BOARD
 - `GAP`
 - `RISK`
 - `ACTION`
+- `DECISION_GOVERNANCE`
+- `DECISION_VALUE`
+- `DECISION_MODEL_ROUTING`
+- `DECISION_PORTFOLIO`
 
 ## Proposal States
 
@@ -54,6 +66,10 @@ Cortex:
 - Assigns severity, priority, rationale, owner, and target recommendations
 - Cannot approve or publish a proposal
 - Does not write directly to governed tables in the current flow
+- Evaluates only `ADDED` or `REPLACED` Evidence against the four immutable
+  published base decisions
+- Cannot regenerate, approve, publish, or advance Current State from an impact
+  result
 
 ## Human Responsibilities
 
@@ -64,6 +80,8 @@ The reviewer:
 - Approves or rejects each proposal
 - Optionally records a Decision comment
 - Explicitly publishes approved proposals
+- Confirms whether a changed-Evidence impact requires Decision Pack
+  reassessment
 
 ## Governed Publication
 
@@ -75,6 +93,15 @@ The reviewer:
 - Duplicate publication is prevented
 
 ## Streamlit Workspaces
+
+### Value Control Plane
+
+- Initiative and Assessment linkage
+- TXT/PDF Evidence upload and original-byte retention
+- Current, Draft, and historical Revision states
+- Evidence lineage and frozen decision comparison
+- changed-Evidence impact analysis with human-confirmation labeling
+- four-section Decision Pack, Published records, and Portfolio
 
 ### Review queue
 
@@ -128,6 +155,12 @@ Production data models may require answer versioning, multiple evidence items, r
 - Production app loaded from the Git-tracked source
 - Visible lists start at 1
 - Empty publication state returns directly to the review queue
+- Published Current State remained immutable while Revision 3 stayed Draft
+- One changed Evidence item was isolated from inherited Evidence
+- Four published decision sections were evaluated in one Cortex call
+- Four sections returned `HIGH` impact and `REASSESS`
+- Duplicate execution returned `SKIPPED`
+- All seven Evidence-impact integrity checks returned zero failures
 
 ## Known Constraints
 

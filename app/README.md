@@ -10,6 +10,9 @@ Assessment + Evidence
 → Human Decision
 → Explicit Publication
 → Governed Record + Portfolio + Audit
+→ Changed Evidence in Draft Revision
+→ Advisory impact analysis
+→ Human reassessment decision
 ```
 
 ## Files
@@ -17,7 +20,7 @@ Assessment + Evidence
 | File | Purpose |
 |---|---|
 | `streamlit_app.py` | Main governance review application and workspace navigation |
-| `value_control_plane.py` | Initiative, TXT/PDF Evidence, Decision Pack, Published, and Portfolio workspaces |
+| `value_control_plane.py` | Initiative, TXT/PDF Evidence, Revision history and impact analysis, Decision Pack, Published, and Portfolio workspaces |
 | `environment.yml` | Snowflake package declaration with Streamlit pinned to `1.35.0` |
 
 ## Workspaces
@@ -33,6 +36,7 @@ Assessment + Evidence
 
 - **Initiative:** create or link an AI Initiative to the selected Assessment Run
 - **Evidence:** upload TXT or PDF files, validate content, hash it, retain immutable originals in `EVIDENCE_ORIGINAL_OBJECT`, and parse PDFs inside the app
+- **Revisions:** inspect Current, Draft, and historical states; Evidence lineage; frozen decision comparisons; and advisory changed-Evidence impact analysis
 - **Decision Pack:** generate exactly four evidence-grounded drafts; inspect the five-step Agent execution trace and structured detail; edit, approve, or reject each section; explicitly publish approved sections
 - **Published:** inspect Governed Decision Records for Governance, Value, Model Routing, and Portfolio
 - **Portfolio:** compare initiative stage, owner, governance state, value assessment, recommendation, and priority
@@ -69,8 +73,12 @@ From the repository root:
 powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File '.\scripts\deploy_production_dashboard.ps1' `
   -ConnectionName '<SNOWFLAKE_CLI_CONNECTION>' `
-  -Database 'READINESSOPS_VALIDATION' `
-  -Schema 'APP'
+  -Database 'READINESSOPS_REVISION_DEV' `
+  -Schema 'APP' `
+  -Warehouse 'READINESSOPS_WH' `
+  -AppName 'READINESSOPS_REVISION_DASHBOARD' `
+  -StageName 'READINESSOPS_REVISION_STAGE' `
+  -ViewerRole 'READINESSOPS_EVALUATOR'
 ```
 
 The script validates and uploads `environment.yml`, `value_control_plane.py`, and `streamlit_app.py`, then recreates the configured Streamlit object.

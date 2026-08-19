@@ -133,7 +133,11 @@ The application uses plain state descriptions:
 
 ## Deployment Decisions
 
-The verified production app is `READINESSOPS_DASHBOARD`.
+The original governed-review baseline was validated as
+`READINESSOPS_VALIDATION.APP.READINESSOPS_DASHBOARD`. The current evaluator
+build, including Revision lineage and changed-Evidence impact analysis, is
+deployed as
+`READINESSOPS_REVISION_DEV.APP.READINESSOPS_REVISION_DASHBOARD`.
 
 The deployment script:
 
@@ -182,12 +186,28 @@ Validated behavior:
 - Empty publication queue includes **Back to review queue**
 - Production dashboard loaded without a Python Interpreter Error
 
-## Environment Used for Demonstration
+## Environments Used for Demonstration
+
+Baseline governance validation:
 
 - Database: `READINESSOPS_VALIDATION`
 - Schema: `APP`
 - Streamlit app: `READINESSOPS_DASHBOARD`
-- Model: `mistral-large2`
 - Synthetic Assessment Run: `RUN_001`
+
+Current Revision evaluation:
+
+- Database: `READINESSOPS_REVISION_DEV`
+- Schema: `APP`
+- Streamlit app: `READINESSOPS_REVISION_DASHBOARD`
+- Warehouse: `READINESSOPS_WH`
+- Evaluator role: `READINESSOPS_EVALUATOR`
+- Isolated Assessment lineage: `RUN_FINALIST_E2E_001` and its Draft Revisions
+- Cortex model: `mistral-large2`
+
+The changed-Evidence extension was validated with one changed Evidence item,
+four affected decision sections, four `HIGH` impacts, four `REASSESS`
+recommendations, duplicate execution returning `SKIPPED`, and zero failures
+across the seven integrity checks.
 
 Counts in the live application change after each demo. Documents describe state transitions and verified behavior rather than treating one screenshot count as a permanent invariant.
