@@ -254,14 +254,21 @@ def _render_evidence_upload(session, run_id):
             stage_path = f"@READINESSOPS_EVIDENCE_STAGE/{relative_path}"
 
             try:
-                session.file.put_stream(
+                put_result = session.file.put_stream(
                     io.BytesIO(raw),
                     stage_path,
                     auto_compress=False,
-                    overwrite=False,
+                    overwrite=True,
                 )
-            except Exception:
-                st.error(f"**{uf.name}**: Original file storage failed.")
+                put_status = _text(getattr(put_result, "status", ""), "")
+                if put_status and put_status not in {"UPLOADED", "SKIPPED"}:
+                    raise RuntimeError(f"Unexpected PUT status: {put_status}")
+            except Exception as exc:
+                detail = str(exc).replace("\n", " ")[:400]
+                st.error(
+                    f"**{uf.name}**: Original file storage failed "
+                    f"({type(exc).__name__}: {detail})"
+                )
                 continue
 
             if extension == "txt":
