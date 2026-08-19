@@ -422,6 +422,183 @@ def _render_evidence_upload(session, run_id):
         pass
 
 
+def _render_evidence_impact_analysis(
+    session, revision_id, revision_no, is_active_draft
+):
+    st.markdown("**Evidence change impact**")
+    st.caption(
+        "Changed Evidence is evaluated against the four published base decisions. "
+        "The result is advisory and requires human confirmation."
+    )
+
+    try:
+        changed = _query(
+            session,
+            "SELECT EVIDENCE_ID,EVIDENCE_CHANGE_TYPE,SOURCE_FILENAME,EVIDENCE_TITLE,"
+            "REPLACED_EVIDENCE_ID,CONTENT_SHA256,CHANGE_RECORDED_AT "
+            "FROM V_REVISION_EVIDENCE_CHANGE WHERE REVISION_ID = ? "
+            "ORDER BY CHANGE_RECORDED_AT,EVIDENCE_ID",
+            [revision_id],
+        )
+        analysis_runs = _query(
+            session,
+            "SELECT ANALYSIS_RUN_ID,STATUS,MODEL_NAME,PROMPT_VERSION,"
+            "CHANGED_EVIDENCE_COUNT,STARTED_AT,COMPLETED_AT,ERROR_MESSAGE,CREATED_BY "
+            "FROM REVISION_IMPACT_ANALYSIS_RUN WHERE REVISION_ID = ? "
+            "ORDER BY CREATED_AT DESC",
+            [revision_id],
+        )
+    except Exception as exc:
+        st.warning(f"Evidence impact analysis is not available: {exc}")
+        return
+
+    changed_count = len(changed)
+    if is_active_draft:
+        if changed_count == 0:
+            st.info(
+                "Add or replace Evidence in this Draft Revision before running impact analysis."
+            )
+        else:
+            st.markdown(
+                f"{_badge('AI analysis — human confirmation required', 'warning')}",
+                unsafe_allow_html=True,
+            )
+            if st.button(
+                "Analyze evidence impact",
+                type="primary",
+                key=f"vcp_analyze_impact_{revision_id}",
+            ):
+                with st.spinner("Analyzing changed Evidence against published decisions..."):
+                    result = _call_json(
+                        session,
+                        "CALL SP_ANALYZE_REVISION_EVIDENCE_IMPACT(?)",
+                        [revision_id],
+                    )
+                status = result.get("status")
+                if status == "COMPLETED":
+                    st.session_state["vcp_msg"] = (
+                        "Evidence impact analysis completed: "
+                        f"{result.get('impact_items', 0)} sections evaluated."
+                    )
+                elif status == "SKIPPED":
+                    st.session_state["vcp_msg"] = (
+                        "Identical Evidence and base decisions were already analyzed."
+                    )
+                else:
+                    st.session_state["vcp_err"] = (
+                        "Impact analysis failed: "
+                        f"{result.get('error', 'Unknown error')}"
+                    )
+                _rerun()
+
+    if changed_count:
+        with st.expander(f"Changed Evidence ({changed_count})"):
+            _show_df(changed.rename(columns={
+                "EVIDENCE_ID": "Evidence ID",
+                "EVIDENCE_CHANGE_TYPE": "Change",
+                "SOURCE_FILENAME": "File",
+                "EVIDENCE_TITLE": "Title",
+                "REPLACED_EVIDENCE_ID": "Replaced Evidence",
+                "CONTENT_SHA256": "SHA-256",
+                "CHANGE_RECORDED_AT": "Recorded at",
+            }))
+
+    if analysis_runs.empty:
+        st.info("No Evidence impact analysis has been recorded for this Revision.")
+        return
+
+    run_options = {}
+    for _, row in analysis_runs.iterrows():
+        event_time = (
+            row["COMPLETED_AT"]
+            if pd.notna(row["COMPLETED_AT"])
+            else row["STARTED_AT"]
+        )
+        run_options[
+            f"{_timestamp(event_time)} · {_text(row['STATUS'])} · "
+            f"{_text(row['ANALYSIS_RUN_ID'])}"
+        ] = row
+    selected_label = st.selectbox(
+        "Recorded analysis",
+        list(run_options.keys()),
+        key=f"vcp_impact_run_{revision_id}",
+    )
+    selected_run = run_options[selected_label]
+    analysis_run_id = _text(selected_run["ANALYSIS_RUN_ID"], "")
+    analysis_status = _text(selected_run["STATUS"], "")
+
+    if analysis_status != "COMPLETED":
+        st.error(
+            f"Analysis {analysis_status}: "
+            f"{_text(selected_run.get('ERROR_MESSAGE'), 'No error detail')}"
+        )
+        return
+
+    items = _query(
+        session,
+        "SELECT SECTION_TYPE,IMPACT_LEVEL,RECOMMENDED_TREATMENT,CONFIDENCE,"
+        "RATIONALE,SOURCE_EVIDENCE_IDS FROM REVISION_IMPACT_ANALYSIS_ITEM "
+        "WHERE ANALYSIS_RUN_ID = ? AND REVISION_ID = ? ORDER BY "
+        "CASE SECTION_TYPE WHEN 'DECISION_GOVERNANCE' THEN 1 "
+        "WHEN 'DECISION_VALUE' THEN 2 WHEN 'DECISION_MODEL_ROUTING' THEN 3 "
+        "WHEN 'DECISION_PORTFOLIO' THEN 4 ELSE 5 END",
+        [analysis_run_id, revision_id],
+    )
+
+    if len(items) != 4:
+        st.error(
+            "Completed analysis does not contain the required four decision sections."
+        )
+        return
+
+    affected = _integer((items["IMPACT_LEVEL"].astype(str) != "NONE").sum())
+    high = _integer((items["IMPACT_LEVEL"].astype(str) == "HIGH").sum())
+    reassess = _integer(
+        (items["RECOMMENDED_TREATMENT"].astype(str) == "REASSESS").sum()
+    )
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Changed Evidence", changed_count)
+    m2.metric("Affected sections", affected)
+    m3.metric("High impact", high)
+    m4.metric("Reassessment recommended", reassess)
+
+    st.markdown(
+        f"{_badge('AI analysis — human confirmation required', 'warning')} "
+        f"Revision {revision_no}",
+        unsafe_allow_html=True,
+    )
+    summary = items[[
+        "SECTION_TYPE", "IMPACT_LEVEL", "RECOMMENDED_TREATMENT", "CONFIDENCE",
+    ]].rename(columns={
+        "SECTION_TYPE": "Decision section",
+        "IMPACT_LEVEL": "Impact",
+        "RECOMMENDED_TREATMENT": "Treatment",
+        "CONFIDENCE": "Confidence",
+    })
+    _show_df(summary)
+
+    detail_options = {
+        f"{_text(row['SECTION_TYPE'])} · {_text(row['IMPACT_LEVEL'])}": row
+        for _, row in items.iterrows()
+    }
+    selected_detail = st.selectbox(
+        "Impact detail",
+        list(detail_options.keys()),
+        key=f"vcp_impact_detail_{analysis_run_id}",
+    )
+    detail = detail_options[selected_detail]
+    st.markdown(f"**Rationale:** {_text(detail['RATIONALE'])}")
+    st.markdown(
+        f"**Changed Evidence cited:** {_text(detail['SOURCE_EVIDENCE_IDS'], 'None')}"
+    )
+    st.caption(
+        f"Model: {_text(selected_run['MODEL_NAME'])} · "
+        f"Prompt: {_text(selected_run['PROMPT_VERSION'])} · "
+        f"Actor: {_text(selected_run['CREATED_BY'])} · "
+        f"Completed: {_timestamp(selected_run['COMPLETED_AT'])}"
+    )
+
+
 def _render_revision_history(session, run_id):
     """Show immutable Revision history and the frozen before/after comparison."""
     st.subheader("Revision history and comparison")
@@ -433,7 +610,11 @@ def _render_revision_history(session, run_id):
     try:
         selected_revision = _query(
             session,
-            "SELECT CASE_ID FROM ASSESSMENT_REVISION WHERE RUN_ID = ?",
+            "SELECT revision.CASE_ID,revision.REVISION_ID,revision.REVISION_NO,"
+            "IFF(case_record.ACTIVE_DRAFT_REVISION_ID = revision.REVISION_ID,TRUE,FALSE) "
+            "AS IS_ACTIVE_DRAFT FROM ASSESSMENT_REVISION revision "
+            "JOIN ASSESSMENT_CASE case_record ON case_record.CASE_ID = revision.CASE_ID "
+            "WHERE revision.RUN_ID = ?",
             [run_id],
         )
     except Exception as exc:
@@ -445,6 +626,9 @@ def _render_revision_history(session, run_id):
         return
 
     case_id = _text(selected_revision.iloc[0]["CASE_ID"], "")
+    revision_id = _text(selected_revision.iloc[0]["REVISION_ID"], "")
+    revision_no = _integer(selected_revision.iloc[0]["REVISION_NO"])
+    is_active_draft = bool(selected_revision.iloc[0]["IS_ACTIVE_DRAFT"])
     try:
         current = _query(
             session,
@@ -532,6 +716,10 @@ def _render_revision_history(session, run_id):
             "ORIGIN_EVIDENCE_ID": "Origin Evidence",
             "INHERITED_FROM_EVIDENCE_ID": "Inherited from",
         }))
+
+    _render_evidence_impact_analysis(
+        session, revision_id, revision_no, is_active_draft
+    )
 
     st.markdown("**Frozen decision comparison**")
     if comparison.empty:
