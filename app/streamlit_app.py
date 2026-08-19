@@ -299,9 +299,54 @@ st.markdown(
 try:
     runs_df = query_df(
         """
-        SELECT RUN_ID, RUN_NAME, STATUS, ORGANIZATION_NAME, CREATED_AT
-        FROM ASSESSMENT_RUNS
-        ORDER BY CREATED_AT DESC
+        WITH run_catalog AS (
+            SELECT
+                assessment_run.RUN_ID,
+                assessment_run.RUN_NAME,
+                REGEXP_REPLACE(
+                    assessment_run.RUN_NAME,
+                    ' - Revision [0-9]+$',
+                    ''
+                ) AS ASSESSMENT_NAME,
+                assessment_run.STATUS,
+                assessment_run.ORGANIZATION_NAME,
+                assessment_run.CREATED_AT,
+                revision.REVISION_NO,
+                CASE
+                    WHEN case_record.CURRENT_REVISION_ID = revision.REVISION_ID
+                        THEN 'CURRENT'
+                    WHEN case_record.ACTIVE_DRAFT_REVISION_ID = revision.REVISION_ID
+                        THEN 'DRAFT'
+                    WHEN revision.REVISION_ID IS NOT NULL
+                        THEN 'HISTORY'
+                    ELSE 'STANDALONE'
+                END AS RUN_ROLE
+            FROM ASSESSMENT_RUNS assessment_run
+            LEFT JOIN ASSESSMENT_REVISION revision
+              ON revision.RUN_ID = assessment_run.RUN_ID
+            LEFT JOIN ASSESSMENT_CASE case_record
+              ON case_record.CASE_ID = revision.CASE_ID
+        )
+        SELECT
+            RUN_ID,
+            RUN_NAME,
+            ASSESSMENT_NAME,
+            STATUS,
+            ORGANIZATION_NAME,
+            CREATED_AT,
+            REVISION_NO,
+            RUN_ROLE
+        FROM run_catalog
+        ORDER BY
+            CASE RUN_ROLE
+                WHEN 'CURRENT' THEN 1
+                WHEN 'DRAFT' THEN 2
+                WHEN 'STANDALONE' THEN 3
+                WHEN 'HISTORY' THEN 4
+                ELSE 5
+            END,
+            REVISION_NO DESC NULLS LAST,
+            CREATED_AT DESC
         """
     )
 except Exception as exc:
@@ -312,19 +357,47 @@ if runs_df.empty:
     st.warning("No assessment runs are available.")
     st.stop()
 
+show_other_runs = st.checkbox(
+    "Show historical and standalone runs",
+    value=False,
+    help=(
+        "Current and Draft Revisions are shown by default. Enable this only "
+        "when inspecting historical or pre-Revision Assessment Runs."
+    ),
+)
+visible_runs_df = runs_df[
+    runs_df["RUN_ROLE"].isin(["CURRENT", "DRAFT"])
+].copy()
+if show_other_runs or visible_runs_df.empty:
+    visible_runs_df = runs_df.copy()
+
 run_options = {}
-for _, run_row in runs_df.iterrows():
+for _, run_row in visible_runs_df.iterrows():
+    role = text(run_row["RUN_ROLE"], "STANDALONE")
+    assessment_name = text(
+        run_row["ASSESSMENT_NAME"],
+        text(run_row["RUN_NAME"], text(run_row["RUN_ID"])),
+    )
+    revision_no = run_row.get("REVISION_NO")
+    revision_label = (
+        f" | Revision {integer(revision_no)}"
+        if revision_no is not None and pd.notna(revision_no)
+        else ""
+    )
     label = (
-        f"{text(run_row['RUN_NAME'], text(run_row['RUN_ID']))}"
-        f" — {text(run_row['ORGANIZATION_NAME'], 'Organization not set')}"
-        f" ({text(run_row['STATUS'])})"
+        f"{role} | {assessment_name}{revision_label}"
+        f" | {text(run_row['ORGANIZATION_NAME'], 'Organization not set')}"
+        f" | {text(run_row['STATUS'])}"
     )
     run_options[label] = text(run_row["RUN_ID"])
 
 selected_label = st.selectbox(
     "Assessment Run",
     options=list(run_options.keys()),
-    help="All evidence, proposals, decisions, and published records below belong to this run.",
+    help=(
+        "CURRENT is the published operating state. DRAFT is pending work. "
+        "HISTORY and STANDALONE remain available for traceability."
+    ),
 )
 selected_run_id = run_options[selected_label]
 run_id_sql = sql_literal(selected_run_id)
