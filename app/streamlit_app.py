@@ -723,9 +723,7 @@ if latest_attempt is not None and text(latest_attempt["STATUS"], "") == "FAILED"
         "The latest AI review attempt failed. The workspace is showing the most recent completed review. "
         f"Error: {text(latest_attempt['ERROR_MESSAGE'])}"
     )
-elif latest_completed is None:
-    st.warning("No completed AI governance review exists for this Assessment Run.")
-else:
+elif latest_completed is not None:
     st.markdown(
         f"<div class='section-note'><b>Current review:</b> {escaped(latest_agent_run_id)} · "
         f"Completed {escaped(timestamp_text(latest_completed['COMPLETED_AT']))} · "
@@ -740,6 +738,24 @@ if last_action_message:
 last_error_message = st.session_state.pop("last_error_message", None)
 if last_error_message:
     st.error(last_error_message)
+
+assessment_navigation_context = (
+    f"{selected_run_id}:{integer(current_revision_no)}:"
+    f"{integer(draft_revision_no) if has_active_draft else 'none'}"
+)
+if (
+    st.session_state.get("assessment_navigation_context")
+    != assessment_navigation_context
+):
+    st.session_state["workspace_navigation"] = (
+        "Value Control Plane" if has_active_draft else "Review queue"
+    )
+    st.session_state["vcp_section_nav"] = (
+        "Revisions" if has_active_draft else "Initiative"
+    )
+    st.session_state["assessment_navigation_context"] = (
+        assessment_navigation_context
+    )
 
 workspace = st.radio(
     "Workspace",
@@ -760,7 +776,16 @@ if workspace == "Review queue":
     )
 
     if proposals_df.empty:
-        st.info("No proposals are available. Open Review setup to generate an AI review.")
+        if has_active_draft:
+            st.info(
+                "This Draft Revision does not yet have a completed governance "
+                "review. Open Review setup to generate one."
+            )
+        else:
+            st.info(
+                "No proposals are available. Open Review setup to generate an "
+                "AI review."
+            )
     else:
         def render_proposal_detail(row, key_prefix):
             proposal_id = text(row["PROPOSAL_ID"], "")
