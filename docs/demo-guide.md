@@ -11,7 +11,7 @@ Initiative → TXT/PDF Evidence → 4-section Decision Pack
 
 ## Prerequisites
 
-- `READINESSOPS_VALIDATION.APP.READINESSOPS_DASHBOARD` deployed
+- `READINESSOPS_REVISION_DEV.APP.READINESSOPS_REVISION_DASHBOARD` deployed
 - isolated Assessment Run `RUN_FINALIST_E2E_001` selected
 - an AI Initiative linked to that Run
 - one small synthetic TXT file and one small synthetic PDF file
