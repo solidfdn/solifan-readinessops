@@ -117,6 +117,10 @@ See [docs/architecture.md](docs/architecture.md) for the detailed design.
 | `ASSESSMENT_RUNS.INITIATIVE_ID` | Links an Assessment Run to an initiative |
 | `EVIDENCE_ITEMS` | Validated evidence text, hashes, source metadata, parser metadata, and stage path |
 | `READINESSOPS_EVIDENCE_STAGE` | Retains original TXT and PDF files |
+| `EVIDENCE_ORIGINAL_OBJECT` | Retains original uploaded bytes by content hash |
+| `ASSESSMENT_CASE` / `ASSESSMENT_REVISION` | Separates the published Current State from the active Draft Revision |
+| `ASSESSMENT_REVISION_EVIDENCE` | Preserves Evidence lineage and the `BASE`, `INHERITED`, `ADDED`, or `REPLACED` role by Revision |
+| `ASSESSMENT_REVISION_DELTA` | Stores frozen before/after governed decision comparisons |
 | `GOVERNANCE_AGENT_RUN` | Review execution, model, instruction, status, timestamps, fingerprint, and summary |
 | `GOVERNANCE_AGENT_RUN_STEP` | Ordered execution steps, status, timing, safe summaries, and errors for each Decision Pack run |
 | `GOVERNANCE_AGENT_PROPOSAL` | Legacy and Decision Pack drafts with review and publication states |
@@ -126,6 +130,8 @@ See [docs/architecture.md](docs/architecture.md) for the detailed design.
 | `SP_GENERATE_DECISION_PACK` | Generates and validates the four-section Decision Pack |
 | `SP_EDIT_AGENT_PROPOSAL` | Saves reviewer edits before a decision |
 | `SP_PUBLISH_AGENT_RUN` | Publishes approved legacy and Decision Pack proposals idempotently |
+| `SP_ANALYZE_REVISION_EVIDENCE_IMPACT` | Evaluates changed Evidence against the four immutable base decisions without changing governed state |
+| `REVISION_IMPACT_ANALYSIS_RUN` / `REVISION_IMPACT_ANALYSIS_ITEM` | Persists fingerprinted advisory impact results, citations, model, prompt, actor, and timestamps |
 | `V_AI_PORTFOLIO` | Portfolio presentation across AI initiatives |
 
 ## Snowflake Features Used
@@ -269,9 +275,13 @@ The isolated E2E run validated:
 - portfolio recommendation `PROCEED` with priority `85` in the test data
 - zero proposal leakage into `RUN_001`
 - preserved Gap, Risk, and Action publication behavior
+- one changed Evidence item evaluated against four published decision sections
+- four `HIGH` impact results and four `REASSESS` recommendations, all requiring human confirmation
+- duplicate impact execution returned `SKIPPED`
+- all seven Evidence-impact integrity checks returned zero failures
 - successful production Streamlit deployment
 
-See [docs/hackathon/FINAL_TEST_REPORT.md](docs/hackathon/FINAL_TEST_REPORT.md).
+See [docs/hackathon/FINAL_TEST_REPORT.md](docs/hackathon/FINAL_TEST_REPORT.md) and [docs/hackathon/REVISION_EVIDENCE_IMPACT_TEST_REPORT.md](docs/hackathon/REVISION_EVIDENCE_IMPACT_TEST_REPORT.md).
 
 ## Repository Structure
 
