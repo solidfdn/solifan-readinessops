@@ -55,7 +55,7 @@ The existing Gap, Risk, and Action governance workflow remains available and unc
 
 | Requested refinement | Implemented evidence |
 |---|---|
-| Evaluator login or demo access | Deployed `READINESSOPS_VALIDATION.APP.READINESSOPS_DASHBOARD`, documented demo path, and public reconstruction assets |
+| Evaluator login or demo access | Deployed `READINESSOPS_REVISION_DEV.APP.READINESSOPS_REVISION_DASHBOARD`, documented demo path, and public reconstruction assets |
 | Dynamic evidence ingestion | TXT/PDF upload, original-file stage retention, SHA-256 metadata, and Cortex PDF parsing |
 | Live CoCo multi-step orchestration | Five persisted Snowflake-native Run Steps expose status, timing, and failure point around the single Cortex generation call |
 | Post-approval operational action loop | Approved proposals require explicit publication and become governed Decision, Gap, Risk, or Action records with portfolio and audit outputs |

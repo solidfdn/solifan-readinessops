@@ -162,7 +162,6 @@ sql/21_revision_lifecycle_foundation.sql
 sql/24_revision_1_migration.sql
 sql/25_revision_draft_procedures.sql
 sql/27_evidence_binary_storage.sql
-sql/29_register_revision_evidence_procedure.sql
 sql/30_revision_publication_procedure.sql
 sql/32_create_revision_procedure.sql
 ```
@@ -193,8 +192,11 @@ From PowerShell:
 powershell.exe -NoProfile -ExecutionPolicy Bypass `
   -File '.\scripts\deploy_production_dashboard.ps1' `
   -ConnectionName '<SNOWFLAKE_CLI_CONNECTION>' `
-  -Database 'READINESSOPS_VALIDATION' `
+  -Database 'READINESSOPS_REVISION_DEV' `
   -Schema 'APP' `
+  -Warehouse 'READINESSOPS_WH' `
+  -AppName 'READINESSOPS_REVISION_DASHBOARD' `
+  -StageName 'READINESSOPS_REVISION_STAGE' `
   -ViewerRole 'READINESSOPS_EVALUATOR'
 ```
 
@@ -204,7 +206,7 @@ The script uploads:
 - `app/value_control_plane.py`
 - `app/streamlit_app.py`
 
-It then recreates `READINESSOPS_VALIDATION.APP.READINESSOPS_DASHBOARD`. The Streamlit runtime is pinned to `1.35.0`.
+It then recreates `READINESSOPS_REVISION_DEV.APP.READINESSOPS_REVISION_DASHBOARD`. The Streamlit runtime is pinned to `1.35.0`.
 When `ViewerRole` is supplied, the script restores the required Database,
 Schema, and Streamlit `USAGE` grants after `CREATE OR REPLACE`.
 
