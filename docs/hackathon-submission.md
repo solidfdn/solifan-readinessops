@@ -34,6 +34,9 @@ ReadinessOps separates analysis from authority:
 8. Publish only approved sections after explicit confirmation.
 9. Preserve Governed Decision Records and approval/publication history.
 10. Present initiative-level recommendations in a portfolio view.
+11. When Evidence changes, compare only the changed Evidence with the immutable
+    published base decisions and identify which decision sections require
+    reassessment before running the full Decision Pack again.
 
 The existing Gap, Risk, and Action governance workflow remains available and unchanged in behavior.
 
@@ -80,6 +83,8 @@ The existing Gap, Risk, and Action governance workflow remains available and unc
 | Idempotency | Duplicate canonical writes and publication history are prevented |
 | Portfolio | `V_AI_PORTFOLIO` summarizes initiative governance, value, recommendation, and priority |
 | Runtime | Streamlit pinned to `1.35.0`; deployment uploads all required source files |
+| Evidence change impact | One schema-constrained Cortex call evaluates the four published decision sections using only `ADDED`/`REPLACED` Evidence |
+| Change-analysis safety | Fingerprinted, evidence-citation validated, advisory-only output cannot approve, publish, or advance Current State |
 
 ### Real-World Relevance — 30%
 
@@ -110,6 +115,7 @@ The existing Gap, Risk, and Action governance workflow remains available and unc
 | Legacy Gap/Risk/Action preservation | Complete |
 | Production Streamlit deployment | Complete |
 | Isolated E2E validation | Complete |
+| Evidence-difference impact analysis | Implemented; independent E2E validation required before release |
 
 ## Technical Control Boundary
 

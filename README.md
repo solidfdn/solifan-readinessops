@@ -164,6 +164,8 @@ sql/25_revision_draft_procedures.sql
 sql/27_evidence_binary_storage.sql
 sql/30_revision_publication_procedure.sql
 sql/32_create_revision_procedure.sql
+sql/33_evidence_impact_foundation.sql
+sql/34_evidence_impact_procedure.sql
 ```
 
 `sql/20_foundation_slice_1.sql` is idempotent and adds the Value Control Plane objects while preserving existing Gap, Risk, and Action behavior.
@@ -175,6 +177,7 @@ sql/22_revision_lifecycle_validation.sql
 sql/26_revision_draft_validation.sql
 sql/28_evidence_binary_storage_validation.sql
 sql/31_revision_release_validation.sql
+sql/35_evidence_impact_validation.sql
 ```
 
 The Revision lifecycle keeps the published Current State immutable, creates a
@@ -183,6 +186,25 @@ before/after comparisons, and advances Current State only after explicit
 publication. The Value Control Plane **Revisions** section exposes the timeline,
 Evidence lineage, change types, reasons, source Evidence, and before/after
 payloads without requiring SQL access.
+
+For an active Draft Revision, **Revisions → Evidence change impact** compares
+only `ADDED` and `REPLACED` Evidence with the four immutable decisions from the
+published base Revision. The single Cortex call returns one advisory impact per
+decision section with impact level, treatment, confidence, rationale, and
+changed-Evidence citations. The result cannot approve, publish, regenerate, or
+advance Current State; a person decides whether to regenerate the Decision Pack.
+
+Deploy the impact-analysis objects and optionally update Streamlit:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File '.\scripts\deploy_evidence_impact_analysis.ps1' `
+  -ConnectionName 'JD45494' `
+  -Database 'READINESSOPS_REVISION_DEV' `
+  -Schema 'APP' `
+  -Warehouse 'READINESSOPS_WH' `
+  -DeployApp
+```
 
 ### Deploy the Streamlit app
 
@@ -264,12 +286,16 @@ solifan-readinessops/
 │   ├── readiness_agent_prompt.md
 │   └── decision_pack_prompt.md
 ├── scripts/
-│   └── deploy_production_dashboard.ps1
+│   ├── deploy_production_dashboard.ps1
+│   └── deploy_evidence_impact_analysis.ps1
 └── sql/
     ├── 01_setup.sql ... 20_foundation_slice_1.sql
     ├── 21_revision_lifecycle_foundation.sql ... 30_revision_publication_procedure.sql
     ├── 31_revision_release_validation.sql
-    └── 32_create_revision_procedure.sql
+    ├── 32_create_revision_procedure.sql
+    ├── 33_evidence_impact_foundation.sql
+    ├── 34_evidence_impact_procedure.sql
+    └── 35_evidence_impact_validation.sql
 ```
 
 ## Current Limitations

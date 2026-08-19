@@ -150,6 +150,25 @@ The completed isolated run produced:
 
 The demonstration also confirmed original-file retention, PDF parsing, strict output-schema validation, portfolio presentation, and successful production Streamlit deployment.
 
+## Evidence Change Impact Extension
+
+For the Revision demonstration, select the active Draft Revision and open
+**Value Control Plane → Revisions → Evidence change impact**.
+
+1. Confirm the `ADDED` or `REPLACED` Evidence list.
+2. Select **Analyze evidence impact**.
+3. Confirm exactly four decision sections are shown.
+4. Inspect impact, treatment, confidence, rationale, and changed-Evidence IDs.
+5. Point out **AI analysis — human confirmation required**.
+6. Regenerate the Decision Pack only if the reviewer accepts the impact result.
+
+Explain:
+
+> ReadinessOps does not rerun every decision blindly. It first evaluates how
+> changed Evidence can affect the published Governance, Value, Routing, and
+> Portfolio decisions. This result is traceable but advisory; only a person can
+> decide whether reassessment is required.
+
 ## Optional Read-Only Verification
 
 Use a query scoped to the demonstrated Agent Run and `RUN_FINALIST_E2E_001` to confirm proposal, audit, evidence, and `RUN_001` isolation counts. Do not create or modify data during final verification.

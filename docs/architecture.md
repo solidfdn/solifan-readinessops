@@ -93,6 +93,8 @@ Generation never writes to `GOVERNED_DECISION_RECORD`. A proposal can become `PU
 | `GOVERNANCE_AGENT_RUN` | Generation execution, model, instruction, status, timestamps, and summary |
 | `GOVERNANCE_AGENT_RUN_STEP` | Ordered execution status, timing, safe details, and failure point for a Decision Pack run |
 | `GOVERNANCE_AGENT_PROPOSAL` | Legacy or Decision Pack draft and lifecycle state |
+| `REVISION_IMPACT_ANALYSIS_RUN` | Fingerprinted Cortex execution comparing changed Evidence with the published base Decision Pack |
+| `REVISION_IMPACT_ANALYSIS_ITEM` | Four advisory, Evidence-cited impact results; one per governed decision section |
 | `GOVERNANCE_AGENT_PROPOSAL_SOURCE` | Proposal-to-evidence source links |
 | `GOVERNANCE_APPROVAL_HISTORY` | Approval, rejection, and publication events |
 | `GOVERNED_DECISION_RECORD` | Published Governance, Value, Model Routing, and Portfolio decisions |
@@ -131,10 +133,28 @@ Behavior:
 5. Calls `AI_COMPLETE()` with `mistral-large2` and a strict JSON response schema once.
 6. Removes optional markdown fences and parses JSON defensively.
 7. Requires exactly four objects: `governance_summary`, `value_realization`, `model_routing`, and `portfolio_recommendation`.
+
 8. Validates required fields, priority as an integer from 1 through 100, and non-empty source evidence IDs.
 9. Confirms every cited evidence ID belongs to the selected Assessment Run.
 10. Creates four `REVIEW_REQUIRED` proposals and per-section source links.
 11. Marks each step and the run `COMPLETED`, or records the controlled failure point.
+
+## Evidence Change Impact Procedure
+
+`SP_ANALYZE_REVISION_EVIDENCE_IMPACT` is an additive pre-reassessment control:
+
+1. Accepts only the active Draft Revision whose base is the Case's published Current Revision.
+2. Loads only Evidence marked `ADDED` or `REPLACED`.
+3. Loads the four immutable governed decisions from the base Revision.
+4. Fingerprints Evidence, base decisions, model, and prompt version for idempotency.
+5. Makes one schema-constrained Cortex call.
+6. Requires exactly one result for Governance, Value, Model Routing, and Portfolio.
+7. Rejects invalid enums, missing rationale, and citations outside changed Evidence.
+8. Persists advisory results without changing proposals, approvals, publication, Revision state, or Current State.
+
+The reviewer inspects the impact result and decides whether to regenerate the
+Decision Pack. Impact analysis is therefore cost-aware triage, not an authority
+boundary or an automatic publication mechanism.
 
 ### `SP_EDIT_AGENT_PROPOSAL`
 
