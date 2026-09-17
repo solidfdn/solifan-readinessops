@@ -31,6 +31,8 @@ DECLARE
     v_row OBJECT;
     v_title STRING;
     v_text STRING;
+    v_char_count NUMBER;
+    v_source_type STRING;
     v_content_sha256 STRING;
     v_run_id STRING;
     v_initiative_id STRING;
@@ -175,6 +177,8 @@ BEGIN
     END IF;
 
     SELECT SHA2(:v_text, 256) INTO :v_content_sha256;
+    v_char_count := LENGTH(v_text);
+    v_source_type := 'REFERENCE_' || v_source_kind;
 
     -- Assessment and Initiative identities are explicit existing-model keys.
     -- They do not change when Evidence rows or reference bindings change.
@@ -326,10 +330,10 @@ BEGIN
         :v_text,
         'VALIDATED',
         CURRENT_TIMESTAMP(),
-        'REFERENCE_' || :v_source_kind,
+        :v_source_type,
         'text/plain',
         :v_content_sha256,
-        LENGTH(:v_text),
+        :v_char_count,
         CURRENT_TIMESTAMP(),
         :v_actor,
         'SNOWFLAKE_REFERENCE',
