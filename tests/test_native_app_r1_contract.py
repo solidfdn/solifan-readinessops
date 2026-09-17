@@ -81,6 +81,11 @@ class NativeAppR1ContractTests(unittest.TestCase):
         self.assertEqual(upper.count("'LLAMA3.1-8B'"), 1)
         self.assertNotIn("MISTRAL-LARGE2", upper)
         self.assertIn("MODEL => :V_MODEL_NAME", upper)
+        fingerprint = upper[
+            upper.index("V_INPUT_FINGERPRINT :=") :
+            upper.index("-- IDEMPOTENCY")
+        ]
+        self.assertIn(":V_MODEL_NAME", fingerprint)
         self.assertIn("DECISION_PACK_V2", upper)
         for proposal_type in (
             "DECISION_GOVERNANCE",
