@@ -150,6 +150,13 @@ See [docs/architecture.md](docs/architecture.md) for the detailed design.
 
 ## Deployment
 
+Marketplace Native App work now starts in [`native_app/`](native_app/) with the
+root [`snowflake.yml`](snowflake.yml). The R1 package is an isolated technical
+proof for consumer Table/View references and Cortex proposal generation; it does
+not replace the evaluator deployment or claim Marketplace readiness. See
+[`docs/MARKETPLACE_R0_R1_HANDOFF.md`](docs/MARKETPLACE_R0_R1_HANDOFF.md) for the
+verified boundary and remaining runtime checks.
+
 ### Prerequisites
 
 - Snowflake account with Cortex AI and `AI_PARSE_DOCUMENT` available

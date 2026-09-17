@@ -1,0 +1,46 @@
+manifest_version: 1
+
+version:
+  name: V1_0
+  patch: 0
+  label: "ReadinessOps R1 Native App proof"
+  comment: "R1 package proving consumer-data references and Cortex proposal generation."
+
+artifacts:
+  setup_script: setup.sql
+  readme: README.md
+  default_streamlit: APP_CODE.READINESSOPS
+
+configuration:
+  log_level: INFO
+  trace_level: OFF
+
+privileges:
+  - READ SESSION:
+      description: "Required to attribute evidence capture and proposal creation to the signed-in consumer user."
+
+snowflake_database:
+  roles:
+    - CORTEX_USER:
+        description: "Required to generate a review-required proposal from selected evidence with Snowflake Cortex AI."
+
+references:
+  - EVIDENCE_SOURCE_TABLE:
+      label: "Existing evidence table"
+      description: "Optional read-only table already populated by the consumer's normal Snowflake workflow."
+      privileges:
+        - SELECT
+      object_type: TABLE
+      multi_valued: false
+      register_callback: APP_CODE.REGISTER_SINGLE_REFERENCE
+      required_at_setup: false
+
+  - EVIDENCE_SOURCE_VIEW:
+      label: "Existing evidence view"
+      description: "Optional read-only view over data already maintained by the consumer's normal Snowflake workflow."
+      privileges:
+        - SELECT
+      object_type: VIEW
+      multi_valued: false
+      register_callback: APP_CODE.REGISTER_SINGLE_REFERENCE
+      required_at_setup: false
