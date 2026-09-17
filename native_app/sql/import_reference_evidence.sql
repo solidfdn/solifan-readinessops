@@ -100,16 +100,22 @@ BEGIN
     IF (v_source_kind = 'TABLE') THEN
         SELECT COUNT(*)
           INTO :v_match_count
-          FROM REFERENCE('EVIDENCE_SOURCE_TABLE')
+          FROM (
+              SELECT OBJECT_CONSTRUCT_KEEP_NULL(*) AS ROW_OBJECT
+                FROM REFERENCE('EVIDENCE_SOURCE_TABLE')
+          ) source_rows
          WHERE TO_VARCHAR(GET_IGNORE_CASE(
-                   OBJECT_CONSTRUCT_KEEP_NULL(*), :P_SOURCE_KEY_COLUMN
+                   source_rows.ROW_OBJECT, :P_SOURCE_KEY_COLUMN
                )) = :P_SOURCE_KEY_VALUE;
     ELSE
         SELECT COUNT(*)
           INTO :v_match_count
-          FROM REFERENCE('EVIDENCE_SOURCE_VIEW')
+          FROM (
+              SELECT OBJECT_CONSTRUCT_KEEP_NULL(*) AS ROW_OBJECT
+                FROM REFERENCE('EVIDENCE_SOURCE_VIEW')
+          ) source_rows
          WHERE TO_VARCHAR(GET_IGNORE_CASE(
-                   OBJECT_CONSTRUCT_KEEP_NULL(*), :P_SOURCE_KEY_COLUMN
+                   source_rows.ROW_OBJECT, :P_SOURCE_KEY_COLUMN
                )) = :P_SOURCE_KEY_VALUE;
     END IF;
 
@@ -126,19 +132,25 @@ BEGIN
     END IF;
 
     IF (v_source_kind = 'TABLE') THEN
-        SELECT OBJECT_CONSTRUCT_KEEP_NULL(*)
+        SELECT source_rows.ROW_OBJECT
           INTO :v_row
-          FROM REFERENCE('EVIDENCE_SOURCE_TABLE')
+          FROM (
+              SELECT OBJECT_CONSTRUCT_KEEP_NULL(*) AS ROW_OBJECT
+                FROM REFERENCE('EVIDENCE_SOURCE_TABLE')
+          ) source_rows
          WHERE TO_VARCHAR(GET_IGNORE_CASE(
-                   OBJECT_CONSTRUCT_KEEP_NULL(*), :P_SOURCE_KEY_COLUMN
+                   source_rows.ROW_OBJECT, :P_SOURCE_KEY_COLUMN
                )) = :P_SOURCE_KEY_VALUE
          LIMIT 1;
     ELSE
-        SELECT OBJECT_CONSTRUCT_KEEP_NULL(*)
+        SELECT source_rows.ROW_OBJECT
           INTO :v_row
-          FROM REFERENCE('EVIDENCE_SOURCE_VIEW')
+          FROM (
+              SELECT OBJECT_CONSTRUCT_KEEP_NULL(*) AS ROW_OBJECT
+                FROM REFERENCE('EVIDENCE_SOURCE_VIEW')
+          ) source_rows
          WHERE TO_VARCHAR(GET_IGNORE_CASE(
-                   OBJECT_CONSTRUCT_KEEP_NULL(*), :P_SOURCE_KEY_COLUMN
+                   source_rows.ROW_OBJECT, :P_SOURCE_KEY_COLUMN
                )) = :P_SOURCE_KEY_VALUE
          LIMIT 1;
     END IF;
