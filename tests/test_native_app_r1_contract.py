@@ -112,6 +112,10 @@ class NativeAppR1ContractTests(unittest.TestCase):
             self.assertIn("READ SESSION is required", procedure)
         self.assertIn("disabled=not read_session_granted", UI)
 
+    def test_decision_pack_actor_is_exposed_in_read_only_trace(self):
+        self.assertIn("r.CREATED_BY AS RUN_CREATED_BY", SETUP)
+        self.assertIn("s.RUN_CREATED_BY", UI)
+
     def test_failed_decision_pack_run_steps_do_not_depend_on_proposals(self):
         self.assertIn("r.ASSESSMENT_RUN_ID", SETUP)
         self.assertIn("JOIN APP_DATA.GOVERNANCE_AGENT_RUN r", SETUP)
