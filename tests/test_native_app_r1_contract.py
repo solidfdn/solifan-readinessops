@@ -124,6 +124,17 @@ class NativeAppR1ContractTests(unittest.TestCase):
         self.assertIn("V_MATCH_COUNT > 1", upper)
         self.assertIn("CONTENT_SHA256", upper)
 
+    def test_reference_row_object_is_built_only_in_select_clause(self):
+        upper = IMPORT.upper()
+        self.assertEqual(
+            upper.count("SELECT OBJECT_CONSTRUCT_KEEP_NULL(*) AS ROW_OBJECT"),
+            4,
+        )
+        self.assertNotIn(
+            "GET_IGNORE_CASE(\n                   OBJECT_CONSTRUCT_KEEP_NULL(*)",
+            upper,
+        )
+
     def test_identity_changes_when_source_mapping_or_content_changes(self):
         identity = IMPORT[
             IMPORT.index("v_evidence_id :=") : IMPORT.index("BEGIN TRANSACTION")
