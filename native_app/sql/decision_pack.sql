@@ -117,7 +117,8 @@ BEGIN
         COALESCE(:v_assessment_fingerprint, 'NO_ASSESSMENT_ANSWERS') || '||' ||
         COALESCE(:v_evidence_fingerprint, 'NO_EVIDENCE') || '||' ||
         COALESCE(:P_ADDITIONAL_INSTRUCTION, '') || '||' ||
-        :v_prompt_version,
+        :v_prompt_version || '||' ||
+        :v_model_name,
         256
     );
 
