@@ -23,21 +23,23 @@ Baseline: `a818f954b2f54cb4b86fc6c3fd8d5a6e01d7e51b`
 
 ## Verification result
 
-- Earlier R1 shell was installed in account `JD45494` as package
+- Corrected R1 was upgraded successfully in account `JD45494` as package
   `READINESSOPS_MARKETPLACE_PACKAGE` and application
   `READINESSOPS_MARKETPLACE_DEV`.
-- That installation verified application creation, both application roles,
-  both reference declarations, callback/procedure grants, and the declared
-  `READ SESSION` privilege. References were unbound and no runtime data existed.
+- Snowflake setup-script validation passed during `snow app run`. The application
+  exposes both application roles, both read-only reference declarations, and
+  the four ported read views.
+- `READ SESSION` is granted. Both references remain unbound, and the assessment,
+  Evidence, Decision Pack, and run-step views correctly return no data before
+  the first existing-data import.
 - Corrected port: repository tests **33/33 passed**, Native Streamlit compiled,
   `git diff --check` passed, and Snowflake CLI 3.27.0 generated a bundle
   containing both modular SQL files.
-- Corrected port is **not yet upgraded or runtime-validated in Snowflake**.
+- Corrected port is **installed and structurally validated in Snowflake**.
+  Existing-data import and Cortex generation are not yet runtime-validated.
 
 ## Remaining issues
 
-- Upgrade the existing development application and validate setup-script SQL on
-  Snowflake.
 - Bind an existing ReadinessOps Evidence Table/View; verify one-row import,
   exact four-section generation, attribution, idempotency, revoked-access
   behavior, and upgrade persistence.
@@ -46,6 +48,8 @@ Baseline: `a818f954b2f54cb4b86fc6c3fd8d5a6e01d7e51b`
 
 ## Next work
 
-1. Push the corrected R1 port to the current feature branch.
-2. Upgrade `READINESSOPS_MARKETPLACE_DEV` from that branch.
-3. Run `scripts/native_app_r1_validation.sql` and retain actual runtime results.
+1. Confirm which existing ReadinessOps database/table is available in account
+   `JD45494`; do not create a synthetic test database.
+2. Bind that existing Evidence Table/View and validate one-row import.
+3. Generate the exact four-section Decision Pack and retain actual runtime
+   results.
