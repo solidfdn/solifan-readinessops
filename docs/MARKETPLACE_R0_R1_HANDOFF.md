@@ -62,7 +62,7 @@ Baseline: `a818f954b2f54cb4b86fc6c3fd8d5a6e01d7e51b`
   proving model-aware generation idempotency without another Cortex call.
 - Evidence persisted through a subsequent Native App upgrade and was then used
   by the successful Decision Pack run.
-- Repository tests **44/44 passed**, Python compilation passed, and
+- Repository tests **45/45 passed**, Python compilation passed, and
   `git diff --check` passed after the first R2 lifecycle slice.
 - Corrected R1 is **installed and core-runtime validated in Snowflake**. No
   approval, publication, governed Current update, or Marketplace publication
