@@ -23,7 +23,7 @@ Baseline: `a818f954b2f54cb4b86fc6c3fd8d5a6e01d7e51b`
   values are materialized before the `VALUES` clause.
 - Replaced legacy `mistral-large2` in the Native App Decision Pack path with
   Tokyo-native, non-legacy `llama3.1-8b`; the model name is defined once and
-  reused by inference and trace records.
+  reused by inference, trace records, and the input fingerprint.
 - Kept approval, rejection, publication, Revision reassessment, and Current
   updates outside the R1 surface. Evidence changes cannot trigger them.
 
@@ -46,6 +46,11 @@ Baseline: `a818f954b2f54cb4b86fc6c3fd8d5a6e01d7e51b`
 - Decision Pack run `DP_20260917_051714_215` completed with one Cortex call,
   four proposals, and five run steps. All four proposals are
   `REVIEW_REQUIRED`; all five steps are `COMPLETED` with no error.
+- After adding the model to the input fingerprint, run
+  `DP_20260917_053824_633` completed once with four sections and five steps.
+  Repeating the identical call returned `SKIPPED` with fingerprint
+  `254f5af0014544d780080fcfa99d438385bb91844d265e789d7b257a373d20c5`,
+  proving model-aware generation idempotency without another Cortex call.
 - Evidence persisted through a subsequent Native App upgrade and was then used
   by the successful Decision Pack run.
 - Repository tests **35/35 passed** and `git diff --check` passed after the
@@ -56,8 +61,8 @@ Baseline: `a818f954b2f54cb4b86fc6c3fd8d5a6e01d7e51b`
 
 ## Remaining issues
 
-- Verify operator attribution values, repeated-import and repeated-generation
-  idempotency, revoked-reference behavior, and the Admin-only Streamlit flow.
+- Verify operator attribution values, repeated-import idempotency,
+  revoked-reference behavior, and the Admin-only Streamlit flow.
 - Validate a clean consumer-style install and role assignment before the
   Marketplace submission gate.
 - R2 still covers the remaining governed lifecycle and consistency fixes before
@@ -65,7 +70,8 @@ Baseline: `a818f954b2f54cb4b86fc6c3fd8d5a6e01d7e51b`
 
 ## Next work
 
-1. Verify attribution and idempotency against the successful R1 records.
+1. Verify operator attribution and repeated-import idempotency against the
+   successful R1 records.
 2. Verify revoked-reference failure and the Admin-only Streamlit workflow.
 3. Proceed to the next agreed release-plan gate without publishing or changing
    governed state automatically.
