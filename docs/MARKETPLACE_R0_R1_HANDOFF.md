@@ -1,4 +1,4 @@
-# Marketplace release handoff — R0 / R1
+# Marketplace release handoff — R0 / R1 / R2
 
 Updated: 2026-09-17
 Baseline: `a818f954b2f54cb4b86fc6c3fd8d5a6e01d7e51b`
@@ -26,6 +26,15 @@ Baseline: `a818f954b2f54cb4b86fc6c3fd8d5a6e01d7e51b`
   reused by inference, trace records, and the input fingerprint.
 - Kept approval, rejection, publication, Revision reassessment, and Current
   updates outside the R1 surface. Evidence changes cannot trigger them.
+- Began R2 without replacing the evaluated product surface: restored visible
+  workspaces for Evidence and Decision Pack, Human review, Published records,
+  AI Portfolio, and execution trace.
+- Added version/hash-bound proposal editing and review. The editable title and
+  description are normalized into the payload used by approval and publication.
+- Added separate reviewer and publisher application roles and an atomic,
+  idempotent four-section Decision Pack publication procedure.
+- Rebuilt Portfolio selection so one complete published Decision Pack run is
+  selected per initiative; sections from different runs are not mixed.
 
 ## Verification result
 
@@ -53,16 +62,28 @@ Baseline: `a818f954b2f54cb4b86fc6c3fd8d5a6e01d7e51b`
   proving model-aware generation idempotency without another Cortex call.
 - Evidence persisted through a subsequent Native App upgrade and was then used
   by the successful Decision Pack run.
-- Repository tests **35/35 passed** and `git diff --check` passed after the
-  runtime fixes.
+- Repository tests **44/44 passed**, Python compilation passed, and
+  `git diff --check` passed after the first R2 lifecycle slice.
 - Corrected R1 is **installed and core-runtime validated in Snowflake**. No
   approval, publication, governed Current update, or Marketplace publication
   was performed.
+- Operator attribution was confirmed as `READINESSOPS` for Evidence and Decision
+  Pack execution. Repeated Evidence import and repeated Decision Pack generation
+  both returned `SKIPPED` without duplicating state.
+- The unbound View-reference path failed closed with the expected bind-one-source
+  message while the Table reference remained unchanged.
+- The Admin-only Streamlit opened successfully and displayed the bound source,
+  existing Assessment, both completed Decision Pack runs, all four review-required
+  sections, and the execution trace entry point.
+- R2 lifecycle code is **implemented and locally contract-tested only**. It has
+  not yet been upgraded or exercised in Snowflake.
 
 ## Remaining issues
 
-- Verify operator attribution values, repeated-import idempotency,
-  revoked-reference behavior, and the Admin-only Streamlit flow.
+- Upgrade the R2 lifecycle slice and verify setup-script compatibility, role
+  grants, content backfill, stale-version rejection, and the restored workspaces.
+- Revision reassessment and atomic Current advancement remain to be ported and
+  runtime-tested before R2 can be marked complete.
 - Validate a clean consumer-style install and role assignment before the
   Marketplace submission gate.
 - R2 still covers the remaining governed lifecycle and consistency fixes before
@@ -70,8 +91,9 @@ Baseline: `a818f954b2f54cb4b86fc6c3fd8d5a6e01d7e51b`
 
 ## Next work
 
-1. Verify operator attribution and repeated-import idempotency against the
-   successful R1 records.
-2. Verify revoked-reference failure and the Admin-only Streamlit workflow.
-3. Proceed to the next agreed release-plan gate without publishing or changing
-   governed state automatically.
+1. Upgrade the dev Native App and run read-only validation of the new roles,
+   views, version/hash backfill, and Streamlit navigation.
+2. Add Revision reassessment and atomic Revision/Current publication without
+   allowing Evidence changes or AI output to invoke those actions.
+3. Run conflict, retry, failure, and role-denial tests. Approval and explicit
+   publication remain deliberate human test steps and are not auto-executed.

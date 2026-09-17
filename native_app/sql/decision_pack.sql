@@ -722,6 +722,33 @@ BEGIN
         'REVIEW_REQUIRED',
         :v_parsed:portfolio_recommendation;
 
+    -- Freeze the exact content that the human review and publication path sees.
+    -- The payload is normalized with the editable fields so the table columns,
+    -- review surface, approval snapshot, and governed record cannot diverge.
+    UPDATE APP_DATA.GOVERNANCE_AGENT_PROPOSAL
+    SET PROPOSAL_PAYLOAD = OBJECT_INSERT(
+            OBJECT_INSERT(
+                COALESCE(PROPOSAL_PAYLOAD, OBJECT_CONSTRUCT()),
+                'title', TITLE, TRUE
+            ),
+            'description', DESCRIPTION, TRUE
+        ),
+        CONTENT_VERSION = 1,
+        CONTENT_HASH = SHA2(
+            COALESCE(TITLE, '') || '\n' ||
+            COALESCE(DESCRIPTION, '') || '\n' ||
+            COALESCE(TO_JSON(OBJECT_INSERT(
+                OBJECT_INSERT(
+                    COALESCE(PROPOSAL_PAYLOAD, OBJECT_CONSTRUCT()),
+                    'title', TITLE, TRUE
+                ),
+                'description', DESCRIPTION, TRUE
+            )), '{}'),
+            256
+        )
+    WHERE AGENT_RUN_ID = :v_agent_run_id
+      AND STATUS = 'REVIEW_REQUIRED';
+
     -- Source traceability: one immutable row per cited evidence item and section.
     INSERT INTO APP_DATA.GOVERNANCE_AGENT_PROPOSAL_SOURCE (
         PROPOSAL_SOURCE_ID, PROPOSAL_ID, SOURCE_TYPE, SOURCE_ID,

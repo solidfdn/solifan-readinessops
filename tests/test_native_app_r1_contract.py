@@ -15,6 +15,9 @@ IMPORT = (NATIVE / "sql" / "import_reference_evidence.sql").read_text(
 DECISION_PACK = (NATIVE / "sql" / "decision_pack.sql").read_text(
     encoding="utf-8"
 )
+LIFECYCLE = (NATIVE / "sql" / "governed_lifecycle.sql").read_text(
+    encoding="utf-8"
+)
 UI = (NATIVE / "streamlit" / "readinessops_native.py").read_text(
     encoding="utf-8"
 )
@@ -98,12 +101,14 @@ class NativeAppR1ContractTests(unittest.TestCase):
         self.assertIn("'REVIEW_REQUIRED'", upper)
 
     def test_human_gate_is_structural(self):
-        combined = "\n".join((SETUP, IMPORT, DECISION_PACK, UI)).upper()
+        combined = "\n".join((SETUP, IMPORT, DECISION_PACK, LIFECYCLE, UI)).upper()
         self.assertIn("'REVIEW_REQUIRED'", combined)
-        self.assertNotIn("STATUS = 'APPROVED'", combined)
-        self.assertNotIn("STATUS = 'PUBLISHED'", combined)
-        self.assertNotIn("SP_PUBLISH", combined)
-        self.assertNotIn("SP_APPROVE", combined)
+        self.assertIn("SP_REVIEW_DECISION_PROPOSAL", combined)
+        self.assertIn("SP_PUBLISH_DECISION_PACK", combined)
+        self.assertNotIn("SP_REVIEW_DECISION_PROPOSAL", DECISION_PACK)
+        self.assertNotIn("SP_PUBLISH_DECISION_PACK", DECISION_PACK)
+        self.assertIn("Approve displayed version", UI)
+        self.assertIn("Explicitly publish approved Decision Pack", UI)
 
     def test_operator_attribution_fails_closed_in_both_mutation_procedures(self):
         for procedure in (IMPORT, DECISION_PACK):
@@ -191,7 +196,8 @@ class NativeAppR1ContractTests(unittest.TestCase):
         self.assertIn("SP_IMPORT_REFERENCE_EVIDENCE", UI)
         self.assertIn("SP_GENERATE_DECISION_PACK", UI)
         self.assertIn("V_DECISION_PACK_REVIEW", UI)
-        self.assertNotIn("SP_PUBLISH", UI)
+        self.assertIn("SP_REVIEW_DECISION_PROPOSAL", UI)
+        self.assertIn("SP_PUBLISH_DECISION_PACK", UI)
 
     def test_mutating_streamlit_is_admin_only(self):
         grant = (
