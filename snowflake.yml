@@ -1,0 +1,18 @@
+definition_version: 2
+
+entities:
+  readinessops_marketplace_package:
+    type: application package
+    identifier: readinessops_marketplace_package
+    stage: stage_content.readinessops_marketplace_stage
+    manifest: native_app/manifest.yml
+    artifacts:
+      - src: native_app/*
+        dest: ./
+
+  readinessops_marketplace_dev:
+    type: application
+    identifier: readinessops_marketplace_dev
+    from:
+      target: readinessops_marketplace_package
+    debug: false
