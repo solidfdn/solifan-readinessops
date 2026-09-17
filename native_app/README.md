@@ -45,12 +45,13 @@ queue for later governed workflow stages.
    Evidence, then generate the four-section Decision Pack.
 
 The selected evidence text must be non-empty and no more than 50,000 characters.
-The fixed R1 model is `mistral-large2`; availability must be confirmed in the
+The fixed R1 model is `llama3.1-8b`; availability must be confirmed in the
 consumer's selected region before this build is treated as operational.
 
 ## R1 limitations
 
-- Snowflake upgrade and runtime verification are still required for this port.
+- A clean consumer-style install and the remaining negative-path checks are
+  still required before Marketplace submission.
 - Only one evidence row is imported at a time.
 - Table and view references are separate because Native App reference object
   types are explicit.
