@@ -322,7 +322,7 @@ if selected_run_id:
             st.dataframe(evidence, use_container_width=True)
 
             steps = query(
-                "SELECT s.AGENT_RUN_ID, s.STEP_SEQUENCE, s.STEP_CODE, "
+                "SELECT s.AGENT_RUN_ID, s.RUN_CREATED_BY, s.STEP_SEQUENCE, s.STEP_CODE, "
                 "s.STEP_NAME, s.STATUS, s.DURATION_MS, s.ERROR_MESSAGE "
                 "FROM APP_CODE.V_AGENT_RUN_STEP s "
                 "WHERE s.ASSESSMENT_RUN_ID = ? "
