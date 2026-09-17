@@ -30,6 +30,7 @@ BEGIN
     LET v_route_valid BOOLEAN := FALSE;
     LET v_port_valid BOOLEAN := FALSE;
     LET v_prompt_version VARCHAR := 'DECISION_PACK_V2';
+    LET v_model_name VARCHAR := 'llama3.1-8b';
     LET v_assessment_block VARCHAR;
     LET v_assessment_fingerprint VARCHAR;
     LET v_evidence_fingerprint VARCHAR;
@@ -142,7 +143,7 @@ BEGIN
         :v_agent_run_id, :P_ASSESSMENT_RUN_ID, 'DECISION_PACK',
         'Generate a structured Decision Pack covering Governance, Value Realization, Model Routing, and Portfolio recommendations.',
         :P_ADDITIONAL_INSTRUCTION,
-        'RUNNING', 'mistral-large2', :v_prompt_version, :v_input_fingerprint,
+        'RUNNING', :v_model_name, :v_prompt_version, :v_input_fingerprint,
         :v_actor
     );
 
@@ -279,14 +280,14 @@ BEGIN
         :v_agent_run_id || '_STEP_03', :v_agent_run_id, 3,
         'CORTEX_GENERATION', 'Generate four-section Decision Pack',
         'RUNNING', CURRENT_TIMESTAMP(),
-        OBJECT_CONSTRUCT('model', 'mistral-large2', 'prompt_version', :v_prompt_version);
+        OBJECT_CONSTRUCT('model', :v_model_name, 'prompt_version', :v_prompt_version);
 
     -- Call LLM
     -- Strict JSON v2: schema-constrained Decision Pack output
     v_llm_response := (
         SELECT TO_JSON(
             SNOWFLAKE.CORTEX.AI_COMPLETE(
-                model => 'mistral-large2',
+                model => :v_model_name,
                 prompt => :v_prompt,
                 model_parameters => {
                     'temperature': 0,
@@ -448,7 +449,7 @@ BEGIN
     SET STATUS = 'COMPLETED', COMPLETED_AT = CURRENT_TIMESTAMP(),
         DURATION_MS = DATEDIFF('millisecond', STARTED_AT, CURRENT_TIMESTAMP()),
         STEP_DETAIL = OBJECT_CONSTRUCT(
-            'model', 'mistral-large2',
+            'model', :v_model_name,
             'prompt_version', :v_prompt_version,
             'response_chars', LENGTH(COALESCE(:v_llm_response, ''))
         )
