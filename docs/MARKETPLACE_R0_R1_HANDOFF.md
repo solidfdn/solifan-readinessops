@@ -5,60 +5,47 @@ Baseline: `a818f954b2f54cb4b86fc6c3fd8d5a6e01d7e51b`
 
 ## Complete
 
-- Confirmed local `main` and `origin/main` both equal the agreed baseline; there
-  was no newer repository diff at implementation start.
-- Added the first Snowflake Native App package structure: project definition,
-  manifest, setup script, application roles, references, Streamlit UI, and R1
-  validation SQL.
-- Declared `SNOWFLAKE.CORTEX_USER` and `READ SESSION`; did not request broad
-  imported privileges on the SNOWFLAKE database. Both grants remain explicit
-  consumer actions.
-- Added separate read-only references for an existing consumer Table and View.
-- Added a one-row snapshot and Cortex proposal path. Output is always
-  `REVIEW_REQUIRED`; approval, publication, and Current updates are absent.
-- Included the bound-reference token, key mapping, title mapping, title, and
-  text hash in source identity; duplicate row keys are rejected before Cortex.
-- Limited the mutation-capable R1 Streamlit to `READINESSOPS_ADMIN` because
-  Native App Streamlit uses owner's rights. `READINESSOPS_USER` receives only
-  read-only views.
-- Removed file upload from the Native App surface because `st.file_uploader` is
-  unsupported there. The existing evaluator app is unchanged.
+- R0: confirmed the agreed baseline and found no newer `main` difference at
+  implementation start.
+- R1 package/install shell: added `snowflake.yml`, manifest, setup, application
+  roles, Table/View references, and an Admin-only Native App Streamlit.
+- Corrected the initial generic proof so R1 now uses the existing ReadinessOps
+  `AI_INITIATIVE`, `ASSESSMENT_RUNS`, `EVIDENCE_ITEMS`, and
+  `GOVERNANCE_AGENT_*` model. It does not create a second proposal model.
+- Ported the existing `SP_GENERATE_DECISION_PACK` contract: one Cortex call,
+  exact Governance/Value/Model Routing/Portfolio sections, evidence citations,
+  five run steps, idempotency, and four `REVIEW_REQUIRED` proposals.
+- Added a Native App reference adapter that imports one existing consumer row
+  into the existing Evidence model. No synthetic customer database or fixture
+  is included.
+- Kept approval, rejection, publication, Revision reassessment, and Current
+  updates outside the R1 surface. Evidence changes cannot trigger them.
 
 ## Verification result
 
-- Repository contract tests: **28/28 passed** with
-  `python -m unittest discover -s tests -v` after the Astra review fixes.
-- Python source compilation: passed with
-  `python -m compileall -q app native_app/streamlit`.
-- Snowflake CLI 3.27.0 local bundle generation: passed with
-  `snow app bundle --package-entity-id readinessops_marketplace_package`.
-- Git whitespace/error check: passed with `git diff --check`.
-- `snowflake.yml` is tracked by the project and no longer excluded by the
-  repository `.gitignore`.
-- Snowflake Native App installation/runtime: **not verified**.
-- Current deployed evaluator objects and privileges vs baseline: **not
-  verified**.
-
-The current execution environment did not contain Snowflake CLI, a Snowflake
-connector, or a configured Snowflake connection. No Snowflake object, grant,
-application package, application, listing, contract, billing setting, or public
-state was changed.
+- Earlier R1 shell was installed in account `JD45494` as package
+  `READINESSOPS_MARKETPLACE_PACKAGE` and application
+  `READINESSOPS_MARKETPLACE_DEV`.
+- That installation verified application creation, both application roles,
+  both reference declarations, callback/procedure grants, and the declared
+  `READ SESSION` privilege. References were unbound and no runtime data existed.
+- Corrected port: repository tests **33/33 passed**, Native Streamlit compiled,
+  `git diff --check` passed, and Snowflake CLI 3.27.0 generated a bundle
+  containing both modular SQL files.
+- Corrected port is **not yet upgraded or runtime-validated in Snowflake**.
 
 ## Remaining issues
 
-- Run `snow app run` against an isolated development package and resolve any
-  platform syntax/runtime differences.
-- Bind real existing Table and View references; validate Cortex and operator
-  attribution with two users and negative privilege tests.
-- Confirm `mistral-large2` availability in the initial target region.
-- R2 still must connect the full governed lifecycle and fix proposal payload,
-  Revision publication, Current/Portfolio atomicity, authorization, stale
-  decisions, concurrency, retry, and failure injection.
+- Upgrade the existing development application and validate setup-script SQL on
+  Snowflake.
+- Bind an existing ReadinessOps Evidence Table/View; verify one-row import,
+  exact four-section generation, attribution, idempotency, revoked-access
+  behavior, and upgrade persistence.
+- R2 still covers the remaining governed lifecycle and consistency fixes before
+  Marketplace submission.
 
 ## Next work
 
-1. Execute `snow app run -c <development-connection>` from this repository.
-2. Run `scripts/native_app_r1_validation.sql` and retain the output as runtime
-   evidence.
-3. After R1 runtime acceptance, port the existing governed workflow onto this
-   package and start the R2 consistency fixes.
+1. Push the corrected R1 port to the current feature branch.
+2. Upgrade `READINESSOPS_MARKETPLACE_DEV` from that branch.
+3. Run `scripts/native_app_r1_validation.sql` and retain actual runtime results.

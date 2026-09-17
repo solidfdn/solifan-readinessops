@@ -3,8 +3,8 @@ manifest_version: 1
 version:
   name: V1_0
   patch: 0
-  label: "ReadinessOps R1 Native App proof"
-  comment: "R1 package proving consumer-data references and Cortex proposal generation."
+  label: "ReadinessOps R1 Native App"
+  comment: "R1 port of the existing four-section governed Decision Pack workflow."
 
 artifacts:
   setup_script: setup.sql
@@ -22,7 +22,7 @@ privileges:
 snowflake_database:
   roles:
     - CORTEX_USER:
-        description: "Required to generate a review-required proposal from selected evidence with Snowflake Cortex AI."
+        description: "Required to generate the existing four-section review-required Decision Pack with Snowflake Cortex AI."
 
 references:
   - EVIDENCE_SOURCE_TABLE:
