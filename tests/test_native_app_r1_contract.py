@@ -135,6 +135,17 @@ class NativeAppR1ContractTests(unittest.TestCase):
             upper,
         )
 
+    def test_evidence_values_use_materialized_procedure_variables(self):
+        upper = IMPORT.upper()
+        evidence_values = upper[
+            upper.index("INSERT INTO APP_DATA.EVIDENCE_ITEMS") :
+            upper.index("COMMIT;", upper.index("INSERT INTO APP_DATA.EVIDENCE_ITEMS"))
+        ]
+        self.assertIn(":V_SOURCE_TYPE", evidence_values)
+        self.assertIn(":V_CHAR_COUNT", evidence_values)
+        self.assertNotIn("'REFERENCE_' || :V_SOURCE_KIND", evidence_values)
+        self.assertNotIn("LENGTH(:V_TEXT)", evidence_values)
+
     def test_identity_changes_when_source_mapping_or_content_changes(self):
         identity = IMPORT[
             IMPORT.index("v_evidence_id :=") : IMPORT.index("BEGIN TRANSACTION")
