@@ -78,6 +78,9 @@ class NativeAppR1ContractTests(unittest.TestCase):
     def test_decision_pack_contract_is_the_existing_four_sections(self):
         upper = DECISION_PACK.upper()
         self.assertEqual(upper.count("SNOWFLAKE.CORTEX.AI_COMPLETE("), 1)
+        self.assertEqual(upper.count("'LLAMA3.1-8B'"), 1)
+        self.assertNotIn("MISTRAL-LARGE2", upper)
+        self.assertIn("MODEL => :V_MODEL_NAME", upper)
         self.assertIn("DECISION_PACK_V2", upper)
         for proposal_type in (
             "DECISION_GOVERNANCE",
